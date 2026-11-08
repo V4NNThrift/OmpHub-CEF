@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.ProvideTextStyle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -165,10 +164,8 @@ fun AnimatedAlertDialog(
                 Modifier.fillMaxWidth().padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                ProvideTextStyle(MaterialTheme.typography.titleLarge) { title() }
-                ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
-                    Column(Modifier.fillMaxWidth()) { text() }
-                }
+                title()
+                Column(Modifier.fillMaxWidth()) { text() }
                 if (confirmButton != null || dismissButton != null) {
                     Row(
                         Modifier.fillMaxWidth(),
