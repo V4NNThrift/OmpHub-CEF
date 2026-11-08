@@ -104,7 +104,7 @@ private fun fmtFileDate(ms: Long): String =
 /** Ikon file ala Finder: folder biru, warna beda per tipe file. */
 @Composable
 private fun FileIcon(f: File, size: Dp, iconSize: Dp) {
-    val (icon, tint): Pair<ImageVector, Color> = when {
+    val (icon, tint) = when {
         f.isDirectory -> Icons.Default.Folder to Mac.Blue
         f.name.endsWith(".zip") || f.name.endsWith(".tar.gz") || f.name.endsWith(".tgz") ||
             f.name.endsWith(".tar.xz") || f.name.endsWith(".tar") -> Icons.Default.Archive to Mac.Red
