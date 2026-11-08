@@ -46,7 +46,7 @@ object Updater {
     @Volatile private var autoChecked = false
 
     fun currentVersion(ctx: Context): String = runCatching {
-        PackageInfoCompat.getPackageInfo(ctx.packageManager, ctx.packageName, 0).versionName ?: "?"
+        PackageInfoCompat.getPackageInfo(ctx.packageManager, ctx.packageName, 0L).versionName ?: "?"
     }.getOrDefault("?")
 
     /** Cek update. `auto = true` hanya jalan sekali per proses (cek otomatis saat aplikasi dibuka). */
