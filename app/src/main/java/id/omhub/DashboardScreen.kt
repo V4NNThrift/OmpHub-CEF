@@ -1,5 +1,13 @@
 package id.omphub
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -25,7 +33,6 @@ import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -38,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,167 +119,228 @@ fun DashboardScreen() {
     val diskPct = if (perf.diskTotalB > 0) diskUsed * 100f / perf.diskTotalB else 0f
     val cpuPct = (perf.game?.cpuPct ?: 0f).coerceIn(0f, 100f)
 
+    // Nilai gauge bergerak halus (bukan loncat tiap 2 detik).
+    val cpuAnim by animateFloatAsState(cpuPct, macSpringFloat(), label = "cpu")
+    val ramAnim by animateFloatAsState(ramPct, macSpringFloat(), label = "ram")
+    val diskAnim by animateFloatAsState(diskPct, macSpringFloat(), label = "disk")
+
+    // Sumber interaksi untuk efek tekan tombol.
+    val pressStart = rememberPressSource()
+    val pressStop = rememberPressSource()
+    val pressRestart = rememberPressSource()
+    val pressQr = rememberPressSource()
+    val pressShare = rememberPressSource()
+    val pressCopy = rememberPressSource()
+
+    // Tangkap sekali supaya tidak ada `!!` pada state yang bisa berubah.
+    val infoSnapshot = info
+
     Column(
         Modifier.fillMaxSize().background(Mac.Background).verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TrafficLights()
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("OmpHub", color = Mac.Text, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                Text("MONITORING OVERVIEW", color = Mac.Secondary, fontSize = 10.sp, letterSpacing = 1.5.sp)
-            }
-            Box(
-                Modifier.size(38.dp).clip(CircleShape).background(Mac.Panel),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.NotificationsNone, contentDescription = "Notifikasi", tint = Mac.Secondary)
-            }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Resource usage", color = Mac.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text("LIVE • 2s", color = Mac.Green, fontSize = 10.sp, letterSpacing = 1.sp)
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Mac.Panel)
-        ) {
-            Column(Modifier.fillMaxWidth().padding(vertical = 18.dp, horizontal = 10.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    ResourceGauge("CPU", cpuPct, Mac.Blue, if (running) "Server" else "Idle")
-                    ResourceGauge("RAM", ramPct, Mac.Green, if (perf.memTotalKb > 0) fmtMem(usedRam) else "—")
-                    ResourceGauge("DISK", diskPct, Mac.Yellow, if (perf.diskTotalB > 0) fmtBytes(diskUsed) else "—")
+        StaggeredItem(0, Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TrafficLights()
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("OmpHub", color = Mac.Text, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("MONITORING OVERVIEW", color = Mac.Secondary, fontSize = 10.sp, letterSpacing = 1.5.sp)
                 }
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Mac.PanelInner).padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    Modifier.size(38.dp).clip(CircleShape).background(Mac.Panel),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(Modifier.size(7.dp).clip(CircleShape).background(if (running) Mac.Green else Mac.Secondary))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (running) "All systems operational" else "Server is currently offline", color = Mac.Text, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                    Text(queryMs?.let { "$it ms" } ?: "—", color = Mac.Blue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Icon(Icons.Default.NotificationsNone, contentDescription = "Notifikasi", tint = Mac.Secondary)
                 }
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Mac.Panel)
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text("SERVER STATUS", color = Mac.Secondary, fontSize = 10.sp, letterSpacing = 1.3.sp)
-                        Text(if (running) "Server berjalan" else "Server berhenti", color = if (running) Mac.Green else Mac.Text, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+        StaggeredItem(1, Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Resource usage", color = Mac.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text("LIVE • 2s", color = Mac.Green, fontSize = 10.sp, letterSpacing = 1.sp)
+            }
+        }
+
+        StaggeredItem(2, Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Mac.Panel)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 18.dp, horizontal = 10.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        ResourceGauge("CPU", cpuAnim, Mac.Blue, if (running) "Server" else "Idle")
+                        ResourceGauge("RAM", ramAnim, Mac.Green, if (perf.memTotalKb > 0) fmtMem(usedRam) else "—")
+                        ResourceGauge("DISK", diskAnim, Mac.Yellow, if (perf.diskTotalB > 0) fmtBytes(diskUsed) else "—")
                     }
-                    Text(st.engine.label, color = Mac.Blue, fontSize = 10.sp, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Mac.Blue.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 6.dp))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    Button(
-                        onClick = { ServerService.send(ctx, ServerService.ACTION_START) },
-                        enabled = st.ready && game == RunState.STOPPED,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = Mac.Blue, contentColor = Color.White),
-                        shape = RoundedCornerShape(20.dp)
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Mac.PanelInner).padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Text("Start", fontWeight = FontWeight.SemiBold)
+                        if (running) PulsingDot(Mac.Green)
+                        else Box(Modifier.size(7.dp).clip(CircleShape).background(Mac.Secondary))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (running) "All systems operational" else "Server is currently offline", color = Mac.Text, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                        Text(queryMs?.let { "$it ms" } ?: "—", color = Mac.Blue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
-                    OutlinedButton(
-                        onClick = { ServerService.send(ctx, ServerService.ACTION_STOP) },
-                        enabled = game != RunState.STOPPED || db != RunState.STOPPED,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Icon(Icons.Default.Stop, contentDescription = null)
-                        Text("Stop")
-                    }
-                    OutlinedButton(
-                        onClick = { ServerService.send(ctx, ServerService.ACTION_RESTART) },
-                        enabled = running,
-                        shape = RoundedCornerShape(20.dp)
-                    ) { Icon(Icons.Default.Refresh, contentDescription = "Restart") }
-                }
-                if (!st.ready) {
-                    Text("Mesin server belum siap. Buka tab Setup untuk mengunduh open.mp atau SA-MP.", color = Mac.Secondary, fontSize = 11.sp)
                 }
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            SmallStat("PLAYERS ONLINE", if (running && info != null) "${info!!.players}/${info!!.maxPlayers}" else "—", Modifier.weight(1f), Mac.Blue)
-            SmallStat("QUERY PING", queryMs?.let { "$it ms" } ?: "—", Modifier.weight(1f), Mac.Green)
-        }
-
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                Text("Server information", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                val serverInfo = info
-                Text(if (running && serverInfo != null) serverInfo.name else if (running) "Menunggu respons query UDP…" else "Server belum aktif", color = Mac.Text, fontSize = 13.sp)
-                InfoLine("Engine", st.engine.label)
-                InfoLine("UDP port", Prefs.port.toString())
-                InfoLine("Gamemode", serverInfo?.mode ?: "—")
-                InfoLine("Language", serverInfo?.language ?: "—")
-                val ips = localIps()
-                if (ips.isNotEmpty()) InfoLine("LAN address", ips.joinToString { "$it:${Prefs.port}" })
-                InfoLine("Local", "127.0.0.1:${Prefs.port}")
-                val lanAddr = primaryLanAddress()
-                if (lanAddr != null) {
+        StaggeredItem(3, Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Mac.Panel)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("SERVER STATUS", color = Mac.Secondary, fontSize = 10.sp, letterSpacing = 1.3.sp)
+                            AnimatedContent(
+                                targetState = running,
+                                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                                label = "serverStatus"
+                            ) { isRunning ->
+                                Text(
+                                    if (isRunning) "Server berjalan" else "Server berhenti",
+                                    color = if (isRunning) Mac.Green else Mac.Text,
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        Text(st.engine.label, color = Mac.Blue, fontSize = 10.sp, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Mac.Blue.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 6.dp))
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = { ServerService.send(ctx, ServerService.ACTION_START) },
+                            enabled = st.ready && game == RunState.STOPPED,
+                            modifier = Modifier.weight(1f).pressScale(pressStart),
+                            interactionSource = pressStart,
+                            colors = ButtonDefaults.buttonColors(containerColor = Mac.Blue, contentColor = Color.White),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Text("Start", fontWeight = FontWeight.SemiBold)
+                        }
                         OutlinedButton(
-                            onClick = { showQr = lanAddr },
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.weight(1f)
-                        ) { Icon(Icons.Default.QrCode, contentDescription = null); Text("QR") }
+                            onClick = { ServerService.send(ctx, ServerService.ACTION_STOP) },
+                            enabled = game != RunState.STOPPED || db != RunState.STOPPED,
+                            modifier = Modifier.weight(1f).pressScale(pressStop),
+                            interactionSource = pressStop,
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null)
+                            Text("Stop")
+                        }
                         OutlinedButton(
-                            onClick = { shareServerAddress(ctx, lanAddr) },
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.weight(1f)
-                        ) { Icon(Icons.Default.Share, contentDescription = null); Text("Bagikan") }
-                        OutlinedButton(
-                            onClick = { copyText(ctx, "Alamat server", lanAddr) },
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Salin") }
+                            onClick = { ServerService.send(ctx, ServerService.ACTION_RESTART) },
+                            enabled = running,
+                            modifier = Modifier.pressScale(pressRestart),
+                            interactionSource = pressRestart,
+                            shape = RoundedCornerShape(20.dp)
+                        ) { Icon(Icons.Default.Refresh, contentDescription = "Restart") }
+                    }
+                    if (!st.ready) {
+                        Text("Mesin server belum siap. Buka tab Setup untuk mengunduh open.mp atau SA-MP.", color = Mac.Secondary, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        StaggeredItem(4, Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                SmallStat("PLAYERS ONLINE", if (running && infoSnapshot != null) "${infoSnapshot.players}/${infoSnapshot.maxPlayers}" else "—", Modifier.weight(1f), Mac.Blue)
+                SmallStat("QUERY PING", queryMs?.let { "$it ms" } ?: "—", Modifier.weight(1f), Mac.Green)
+            }
+        }
+
+        StaggeredItem(5, Modifier.fillMaxWidth()) {
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    Text("Server information", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    val serverInfo = info
+                    Text(if (running && serverInfo != null) serverInfo.name else if (running) "Menunggu respons query UDP…" else "Server belum aktif", color = Mac.Text, fontSize = 13.sp)
+                    InfoLine("Engine", st.engine.label)
+                    InfoLine("UDP port", Prefs.port.toString())
+                    InfoLine("Gamemode", serverInfo?.mode ?: "—")
+                    InfoLine("Language", serverInfo?.language ?: "—")
+                    val ips = localIps()
+                    if (ips.isNotEmpty()) InfoLine("LAN address", ips.joinToString { "$it:${Prefs.port}" })
+                    InfoLine("Local", "127.0.0.1:${Prefs.port}")
+                    val lanAddr = primaryLanAddress()
+                    if (lanAddr != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { showQr = lanAddr },
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier.weight(1f).pressScale(pressQr),
+                                interactionSource = pressQr
+                            ) { Icon(Icons.Default.QrCode, contentDescription = null); Text("QR") }
+                            OutlinedButton(
+                                onClick = { shareServerAddress(ctx, lanAddr) },
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier.weight(1f).pressScale(pressShare),
+                                interactionSource = pressShare
+                            ) { Icon(Icons.Default.Share, contentDescription = null); Text("Bagikan") }
+                            OutlinedButton(
+                                onClick = { copyText(ctx, "Alamat server", lanAddr) },
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier.weight(1f).pressScale(pressCopy),
+                                interactionSource = pressCopy
+                            ) { Text("Salin") }
+                        }
                     }
                 }
             }
         }
 
         if (st.engine == ServerType.OMP) {
-            CefStatusCard(running, gameLines)
+            StaggeredItem(6, Modifier.fillMaxWidth()) {
+                CefStatusCard(running, gameLines)
+            }
         }
 
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Text("Device performance", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                PerfContent(perf, queryMs)
+        StaggeredItem(7, Modifier.fillMaxWidth()) {
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Text("Device performance", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    PerfContent(perf, queryMs)
+                }
             }
         }
 
         if (running) {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Online players (${players.size})", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    if (players.isEmpty()) Text("Belum ada pemain online.", color = Mac.Secondary, fontSize = 12.sp)
-                    players.forEach { player ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(player.name, color = Mac.Text, fontSize = 13.sp)
-                                Text("${player.score} • ${player.ping} ms", color = Mac.Secondary, fontSize = 11.sp)
-                            }
-                            if (player.id >= 0) {
-                                TextButton(onClick = { confirmAction = "kick" to player }) {
-                                    Text("Kick", color = Mac.Blue, fontSize = 12.sp)
-                                }
-                                TextButton(onClick = { confirmAction = "ban" to player }) {
-                                    Text("Ban", color = Mac.Red, fontSize = 12.sp)
+            StaggeredItem(8, Modifier.fillMaxWidth()) {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Online players (${players.size})", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        if (players.isEmpty()) Text("Belum ada pemain online.", color = Mac.Secondary, fontSize = 12.sp)
+                        players.forEach { player ->
+                            key(player.id) {
+                                AnimatedVisibility(
+                                    visible = true,
+                                    enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 3 },
+                                    exit = fadeOut(tween(150))
+                                ) {
+                                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(player.name, color = Mac.Text, fontSize = 13.sp)
+                                            Text("${player.score} • ${player.ping} ms", color = Mac.Secondary, fontSize = 11.sp)
+                                        }
+                                        if (player.id >= 0) {
+                                            TextButton(onClick = { confirmAction = "kick" to player }) {
+                                                Text("Kick", color = Mac.Blue, fontSize = 12.sp)
+                                            }
+                                            TextButton(onClick = { confirmAction = "ban" to player }) {
+                                                Text("Ban", color = Mac.Red, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -284,7 +353,7 @@ fun DashboardScreen() {
 
     // Dialog QR alamat server.
     showQr?.let { addr ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { showQr = null },
             title = { Text("Scan untuk join") },
             text = {
@@ -300,6 +369,8 @@ fun DashboardScreen() {
                             modifier = Modifier.size(230.dp).clip(RoundedCornerShape(12.dp))
                                 .background(Color.White).padding(8.dp)
                         )
+                    } else {
+                        Text("Gagal membuat QR. Coba lagi.", color = Mac.Red, fontSize = 13.sp)
                     }
                     Text(addr, color = Mac.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     Text("Satu WiFi yang sama dengan HP ini.", color = Mac.Secondary, fontSize = 12.sp)
@@ -316,7 +387,7 @@ fun DashboardScreen() {
 
     // Dialog konfirmasi kick / ban (via RCON).
     confirmAction?.let { (action, player) ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { confirmAction = null },
             title = { Text("${action.replaceFirstChar { it.uppercase() }} ${player.name}?") },
             text = {
@@ -409,7 +480,13 @@ private fun CefStatusCard(running: Boolean, gameLines: List<String>) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Text("CEF", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Text(status, color = if (running && cefSeen) Mac.Green else Mac.Text, fontSize = 13.sp)
+            AnimatedContent(
+                targetState = status,
+                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                label = "cefStatus"
+            ) { s ->
+                Text(s, color = if (running && cefSeen) Mac.Green else Mac.Text, fontSize = 13.sp)
+            }
             InfoLine("fivem.pak", "${fileCount?.let { "$it file" } ?: "—"} • ${humanSize(pak.length())}")
             InfoLine("Pack terakhir", fmtPakTime(pak.lastModified()))
         }

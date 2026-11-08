@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,7 +20,6 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
@@ -68,6 +68,11 @@ fun SetupScreen() {
     var restoreTarget by remember { mutableStateOf<File?>(null) }
     val upd by Updater.state.collectAsStateWithLifecycle()
     val darkTheme by ThemeState.dark.collectAsStateWithLifecycle()
+    val pressInstall = rememberPressSource()
+    val pressDark = rememberPressSource()
+    val pressLight = rememberPressSource()
+    val pressCheckUpd = rememberPressSource()
+    val pressBackup = rememberPressSource()
 
     val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
@@ -87,7 +92,10 @@ fun SetupScreen() {
     }
 
     LaunchedEffect(Unit) { Controller.refreshStatus() }
-    LaunchedEffect(busy, refreshTick) { Controller.refreshStatus(); backups = Controller.listBackups() }
+    // Daftar backup + status dibaca di IO supaya UI tidak nge-freeze.
+    LaunchedEffect(busy, refreshTick) {
+        withContext(Dispatchers.IO) { Controller.refreshStatus(); backups = Controller.listBackups() }
+    }
 
     val isSamp = st.engine == ServerType.SAMP
     val serverName = if (isSamp) "SA-MP ${sampVer.label}" else "open.mp + CEF 7058"
@@ -101,11 +109,14 @@ fun SetupScreen() {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Setup", style = MaterialTheme.typography.headlineMedium)
-            Text("Atur mesin server dan URL unduhan open.mp + CEF 7058 atau SA-MP.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        StaggeredItem(0, Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Setup", style = MaterialTheme.typography.headlineMedium)
+                Text("Atur mesin server dan URL unduhan open.mp + CEF 7058 atau SA-MP.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
+        StaggeredItem(1, Modifier.fillMaxWidth()) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -157,7 +168,8 @@ fun SetupScreen() {
                 Button(
                     onClick = { Controller.installServer() },
                     enabled = readyToInstall,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().pressScale(pressInstall),
+                    interactionSource = pressInstall
                 ) {
                     androidx.compose.material3.Icon(Icons.Default.CloudDownload, contentDescription = null)
                     Spacer(Modifier.padding(start = 4.dp))
@@ -177,26 +189,30 @@ fun SetupScreen() {
                 }
             }
         }
+        }
 
+        StaggeredItem(2, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Tema", style = MaterialTheme.typography.titleMedium)
                 Text("Tampilan macOS, pilih gelap atau terang.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     if (darkTheme) {
-                        Button(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f)) { Text("Gelap") }
+                        Button(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f).pressScale(pressDark), interactionSource = pressDark) { Text("Gelap") }
                     } else {
-                        OutlinedButton(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f)) { Text("Gelap") }
+                        OutlinedButton(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f).pressScale(pressDark), interactionSource = pressDark) { Text("Gelap") }
                     }
                     if (!darkTheme) {
-                        Button(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f)) { Text("Terang") }
+                        Button(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f).pressScale(pressLight), interactionSource = pressLight) { Text("Terang") }
                     } else {
-                        OutlinedButton(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f)) { Text("Terang") }
+                        OutlinedButton(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f).pressScale(pressLight), interactionSource = pressLight) { Text("Terang") }
                     }
                 }
             }
         }
+        }
 
+        StaggeredItem(3, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Update aplikasi", style = MaterialTheme.typography.titleMedium)
@@ -214,7 +230,11 @@ fun SetupScreen() {
                     style = MaterialTheme.typography.bodySmall
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { Updater.check(ctx) }) { Text("Periksa update") }
+                    OutlinedButton(
+                        onClick = { Updater.check(ctx) },
+                        modifier = Modifier.pressScale(pressCheckUpd),
+                        interactionSource = pressCheckUpd
+                    ) { Text("Periksa update") }
                     if (upd is UpdateCheck.Available) {
                         Button(onClick = { Updater.downloadAndInstall(ctx) }) { Text("Unduh & Install") }
                     }
@@ -222,9 +242,17 @@ fun SetupScreen() {
                         Button(onClick = { Updater.installApk(ctx, (upd as UpdateCheck.ReadyToInstall).file) }) { Text("Install") }
                     }
                 }
+                if (upd is UpdateCheck.Checking) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        Text("Memeriksa update…", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
+        }
 
+        StaggeredItem(4, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Backup", style = MaterialTheme.typography.titleMedium)
@@ -239,7 +267,9 @@ fun SetupScreen() {
                                 refreshTick++
                             }
                         },
-                        enabled = !busy
+                        enabled = !busy,
+                        modifier = Modifier.pressScale(pressBackup),
+                        interactionSource = pressBackup
                     ) { Text("Buat backup sekarang") }
                     OutlinedButton(
                         onClick = { restorePicker.launch(arrayOf("application/zip")) },
@@ -276,7 +306,9 @@ fun SetupScreen() {
                 Text("Lokasi: ${Env.backupDir.absolutePath}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        }
 
+        StaggeredItem(5, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("URL unduhan", style = MaterialTheme.typography.titleMedium)
@@ -312,7 +344,9 @@ fun SetupScreen() {
                 }) { Text("Reset URL ke default") }
             }
         }
+        }
 
+        StaggeredItem(6, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -329,11 +363,12 @@ fun SetupScreen() {
                 }
             }
         }
+        }
     }
 
     // Konfirmasi sebelum restore: folder server akan ditimpa isi backup.
     restoreTarget?.let { file ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { restoreTarget = null },
             title = { Text("Pulihkan ${file.name}?") },
             text = { Text("Folder server akan ditimpa dengan isi backup ini. Pastikan server sudah berhenti.") },

@@ -53,7 +53,8 @@ object Env {
         listOf("libproot.so", "libproot-loader.so", "libqemu-i386.so", "libtalloc.so").all { nativeLib(it).exists() }
 
     fun prepareDirs() {
-        listOf(tmpDir, libDir, serverDir, dbData, backupDir, dlDir, dbCredFile.parentFile!!).forEach { it.mkdirs() }
+        listOf(tmpDir, libDir, serverDir, dbData, backupDir, dlDir).forEach { it.mkdirs() }
+        dbCredFile.parentFile?.mkdirs()
         val src = nativeLib("libtalloc.so")
         val link = File(libDir, "libtalloc.so.2")
         if (src.exists()) {

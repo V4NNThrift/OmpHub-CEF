@@ -4,6 +4,10 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -25,7 +31,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Upload
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -72,6 +78,7 @@ private fun displayName(ctx: android.content.Context, uri: Uri): String {
     return uri.lastPathSegment?.substringAfterLast('/') ?: "file"
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FilesScreen() {
     val ctx = LocalContext.current
@@ -81,64 +88,96 @@ fun FilesScreen() {
     var tick by remember { mutableIntStateOf(0) }
     var editing by remember { mutableStateOf<File?>(null) }
     var editText by remember { mutableStateOf("") }
+    var loadingFile by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<File?>(null) }
     var newName by remember { mutableStateOf<Boolean?>(null) }
     var nameInput by remember { mutableStateOf("") }
 
     val entries = remember(cwd, tick) {
-        cwd.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+        runCatching {
+            cwd.listFiles()?.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) ?: emptyList()
+        }.getOrDefault(emptyList())
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         scope.launch(Dispatchers.IO) {
             var n = 0
+            var failed = 0
             uris.forEach { uri ->
-                val name = displayName(ctx, uri)
-                val out = Zips.safeResolve(cwd, name) ?: return@forEach
-                ctx.contentResolver.openInputStream(uri)?.use { i -> out.outputStream().use { o -> i.copyTo(o) } }
-                n++
+                runCatching {
+                    val name = displayName(ctx, uri)
+                    val out = Zips.safeResolve(cwd, name) ?: error("Nama file tidak valid")
+                    ctx.contentResolver.openInputStream(uri)?.use { i -> out.outputStream().use { o -> i.copyTo(o) } }
+                        ?: error("Tidak bisa membaca file")
+                    n++
+                }.onFailure { failed++ }
             }
             tick++
-            toast(ctx, "$n file diunggah")
+            toast(ctx, if (failed > 0) "$n file diunggah, $failed gagal" else "$n file diunggah")
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(
-                onClick = { cwd.parentFile?.let { cwd = it } },
-                enabled = cwd != root
-            ) { Icon(Icons.Default.ArrowBack, "Naik") }
-            Text(
-                "/" + cwd.relativeTo(root).path,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleSmall
-            )
-            IconButton(onClick = { picker.launch(arrayOf("*/*")) }) { Icon(Icons.Default.Upload, "Unggah") }
-            IconButton(onClick = { newName = true; nameInput = "" }) { Icon(Icons.Default.Add, "Folder baru") }
-            IconButton(onClick = { newName = false; nameInput = "" }) { Icon(Icons.Default.Description, "File baru") }
-            IconButton(onClick = { tick++ }) { Icon(Icons.Default.Refresh, "Muat ulang") }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 6 }
+        ) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { cwd.parentFile?.let { cwd = it } },
+                    enabled = cwd != root
+                ) { Icon(Icons.Default.ArrowBack, "Naik") }
+                Text(
+                    "/" + cwd.relativeTo(root).path,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                IconButton(onClick = { picker.launch(arrayOf("*/*")) }) { Icon(Icons.Default.Upload, "Unggah") }
+                IconButton(onClick = { newName = true; nameInput = "" }) { Icon(Icons.Default.Add, "Folder baru") }
+                IconButton(onClick = { newName = false; nameInput = "" }) { Icon(Icons.Default.Description, "File baru") }
+                IconButton(onClick = { tick++ }) { Icon(Icons.Default.Refresh, "Muat ulang") }
+            }
         }
         HorizontalDivider()
 
+        if (loadingFile) {
+            Row(
+                Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                Text("Membuka file…", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
         if (entries.isEmpty()) Text("Folder kosong", Modifier.padding(16.dp))
         LazyColumn(Modifier.fillMaxSize()) {
-            items(entries.size) { idx ->
-                val f = entries[idx]
-                Column {
+            items(entries, key = { it.absolutePath }) { f ->
+                val pressRow = rememberPressSource()
+                Column(Modifier.animateItem()) {
                 Row(
-                    Modifier.fillMaxWidth().clickable {
-                        if (f.isDirectory) {
-                            cwd = f
-                        } else if (f.length() > 512 * 1024 || looksBinary(f)) {
-                            scope.launch { toast(ctx, "File biner / terlalu besar untuk diedit") }
-                        } else {
-                            editText = f.readText()
-                            editing = f
+                    Modifier.fillMaxWidth()
+                        .clickable(interactionSource = pressRow, indication = null) {
+                            if (f.isDirectory) {
+                                cwd = f
+                            } else if (f.length() > 512 * 1024 || looksBinary(f)) {
+                                scope.launch { toast(ctx, "File biner / terlalu besar untuk diedit") }
+                            } else {
+                                // Baca di IO supaya UI tidak nge-freeze (dulu di main thread).
+                                loadingFile = true
+                                scope.launch(Dispatchers.IO) {
+                                    val text = runCatching { f.readText() }.getOrNull()
+                                    if (text != null) { editText = text; editing = f }
+                                    else toast(ctx, "Gagal membaca file")
+                                    loadingFile = false
+                                }
+                            }
                         }
-                    }.padding(horizontal = 12.dp, vertical = 6.dp),
+                        .pressScale(pressRow)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -206,13 +245,17 @@ fun FilesScreen() {
     }
 
     toDelete?.let { f ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { toDelete = null },
             title = { Text("Hapus ${f.name}?") },
             text = { Text(if (f.isDirectory) "Seluruh isi folder ikut terhapus." else "File akan dihapus permanen.") },
             confirmButton = {
                 TextButton(onClick = {
-                    scope.launch(Dispatchers.IO) { deleteTree(f); tick++ }
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { deleteTree(f) }
+                            .onSuccess { tick++ }
+                            .onFailure { toast(ctx, "Gagal hapus: ${it.message}") }
+                    }
                     toDelete = null
                 }) { Text("Hapus") }
             },
@@ -221,7 +264,7 @@ fun FilesScreen() {
     }
 
     newName?.let { isFolder ->
-        AlertDialog(
+        AnimatedAlertDialog(
             onDismissRequest = { newName = null },
             title = { Text(if (isFolder) "Folder baru" else "File baru") },
             text = {
@@ -231,8 +274,9 @@ fun FilesScreen() {
                 TextButton(onClick = {
                     val target = Zips.safeResolve(cwd, nameInput.trim())
                     if (target != null && nameInput.isNotBlank()) {
-                        if (isFolder) target.mkdirs() else { target.parentFile?.mkdirs(); target.createNewFile() }
-                        tick++
+                        runCatching {
+                            if (isFolder) target.mkdirs() else { target.parentFile?.mkdirs(); target.createNewFile() }
+                        }.onSuccess { tick++ }.onFailure { scope.launch { toast(ctx, "Gagal buat: ${it.message}") } }
                     }
                     newName = null
                 }) { Text("Buat") }

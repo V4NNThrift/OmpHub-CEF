@@ -9,15 +9,53 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+
+/** Inter (variable font, OFL) — terasa seperti SF Pro macOS. */
+val InterFontFamily = FontFamily(
+    Font(R.font.inter, FontWeight.Normal),
+    Font(R.font.inter, FontWeight.Medium),
+    Font(R.font.inter, FontWeight.SemiBold),
+    Font(R.font.inter, FontWeight.Bold),
+    Font(R.font.inter, FontWeight.ExtraBold)
+)
+
+/** Tipografi app-wide: semua style default Material 3 dengan font Inter. */
+val OmpTypography: Typography
+    get() {
+        val base = Typography()
+        fun TextStyle.inter() = copy(fontFamily = InterFontFamily)
+        return Typography(
+            displayLarge = base.displayLarge.inter(),
+            displayMedium = base.displayMedium.inter(),
+            displaySmall = base.displaySmall.inter(),
+            headlineLarge = base.headlineLarge.inter(),
+            headlineMedium = base.headlineMedium.inter(),
+            headlineSmall = base.headlineSmall.inter(),
+            titleLarge = base.titleLarge.inter(),
+            titleMedium = base.titleMedium.inter(),
+            titleSmall = base.titleSmall.inter(),
+            bodyLarge = base.bodyLarge.inter(),
+            bodyMedium = base.bodyMedium.inter(),
+            bodySmall = base.bodySmall.inter(),
+            labelLarge = base.labelLarge.inter(),
+            labelMedium = base.labelMedium.inter(),
+            labelSmall = base.labelSmall.inter()
+        )
+    }
 
 /**
  * Palet macOS (ala Big Sur / Sequoia), gelap + terang.

@@ -1,5 +1,6 @@
 package id.omphub
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
@@ -70,10 +72,11 @@ private fun Metric(label: String, value: String) {
 @Composable
 private fun ProcBlock(title: String, u: ProcUsage, cores: Int, uptimeMs: Long?) {
     val ofTotal = u.cpuPct / (cores * 100f)
+    val cpuAnim by animateFloatAsState(ofTotal.coerceIn(0f, 1f), macSpringFloat(), label = "cpuBar")
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall)
         Metric("CPU", String.format(Locale.US, "%.0f%%  (%.2f dari %d core)", u.cpuPct, u.cpuPct / 100f, cores))
-        LinearProgressIndicator(progress = { ofTotal.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { cpuAnim }, modifier = Modifier.fillMaxWidth())
         Sparkline(u.cpuHist, minMax = 100f)
         Metric("RAM", fmtMem(u.rssKb))
         Sparkline(u.ramHistMb, minMax = 64f)
@@ -94,8 +97,9 @@ fun PerfContent(p: PerfSnapshot, queryMs: Long?) {
     if (queryMs != null) Metric("Respons query", "$queryMs ms")
     if (p.memTotalKb > 0) {
         val used = p.memTotalKb - p.memAvailKb
+        val ramAnim by animateFloatAsState((used.toFloat() / p.memTotalKb).coerceIn(0f, 1f), macSpringFloat(), label = "ramBar")
         Metric("RAM HP terpakai", "${fmtMem(used)} / ${fmtMem(p.memTotalKb)}")
-        LinearProgressIndicator(progress = { (used.toFloat() / p.memTotalKb).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { ramAnim }, modifier = Modifier.fillMaxWidth())
         if (p.lowMemory) Text("Memori HP hampir habis, Android bisa mematikan server.", color = MaterialTheme.colorScheme.error)
     }
     p.thermal?.let { Metric("Status termal", it) }

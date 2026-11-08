@@ -5,6 +5,15 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +25,6 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Terminal
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -66,7 +74,6 @@ private val TABS: List<Pair<String, ImageVector>> = listOf(
 fun OmpRoot() {
     val ctx = LocalContext.current
     // Dikoleksi supaya seluruh tree recompose saat tema berubah (Mac.* membaca Prefs.themeDark).
-    @Suppress("UNUSED_VARIABLE")
     val dark by ThemeState.dark.collectAsState()
     val updateState by Updater.state.collectAsStateWithLifecycle()
 
@@ -84,54 +91,72 @@ fun OmpRoot() {
         }
     }
 
-    MaterialTheme(colorScheme = ompColors(), shapes = OmpShapes) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    // Latar belakang ikut beranimasi saat tema berganti (bukan pindah mendadak).
+    val bg by animateColorAsState(Mac.Background, tween(300), label = "bg")
+    val panel by animateColorAsState(Mac.Panel, tween(300), label = "panel")
+
+    MaterialTheme(colorScheme = ompColors(), shapes = OmpShapes, typography = OmpTypography) {
+        Surface(Modifier.fillMaxSize(), color = bg) {
             val gate by Controller.bootGate.collectAsState()
             if (gate != BootGate.DONE) {
                 BootScreen()
                 return@Surface
             }
             var tab by rememberSaveable { mutableIntStateOf(0) }
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                bottomBar = {
-                    NavigationBar(containerColor = Mac.Panel, contentColor = Mac.Secondary) {
-                        TABS.forEachIndexed { index, (label, icon) ->
-                            NavigationBarItem(
-                                selected = tab == index,
-                                onClick = { tab = index },
-                                icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Mac.Blue,
-                                    selectedTextColor = Mac.Blue,
-                                    indicatorColor = Mac.Blue.copy(alpha = 0.18f),
-                                    unselectedIconColor = Mac.Secondary,
-                                    unselectedTextColor = Mac.Secondary
+            // Ganti tema = crossfade halus seluruh UI (bukan snap).
+            Crossfade(targetState = dark, animationSpec = tween(350), label = "theme") {
+                Scaffold(
+                    containerColor = bg,
+                    bottomBar = {
+                        NavigationBar(containerColor = panel, contentColor = Mac.Secondary) {
+                            TABS.forEachIndexed { index, (label, icon) ->
+                                NavigationBarItem(
+                                    selected = tab == index,
+                                    onClick = { tab = index },
+                                    icon = { Icon(icon, contentDescription = label) },
+                                    label = { Text(label) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Mac.Blue,
+                                        selectedTextColor = Mac.Blue,
+                                        indicatorColor = Mac.Blue.copy(alpha = 0.18f),
+                                        unselectedIconColor = Mac.Secondary,
+                                        unselectedTextColor = Mac.Secondary
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
-                }
-            ) { padding ->
-                val setupBusy by Controller.setupBusy.collectAsState()
-                Column(Modifier.padding(padding).fillMaxSize()) {
-                    if (setupBusy) {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                        Text(
-                            "Menyiapkan komponen server…",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Box(Modifier.weight(1f).fillMaxSize()) {
-                        when (tab) {
-                            0 -> DashboardScreen()
-                            1 -> ConsoleScreen()
-                            2 -> FilesScreen()
-                            3 -> DatabaseScreen()
-                            else -> SetupScreen()
+                ) { padding ->
+                    val setupBusy by Controller.setupBusy.collectAsState()
+                    Column(Modifier.padding(padding).fillMaxSize()) {
+                        if (setupBusy) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                            Text(
+                                "Menyiapkan komponen server…",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Box(Modifier.weight(1f).fillMaxSize()) {
+                            // Pindah tab = fade + geser halus.
+                            AnimatedContent(
+                                targetState = tab,
+                                transitionSpec = {
+                                    (fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                                        slideInVertically(tween(220, easing = FastOutSlowInEasing)) { it / 8 }) togetherWith
+                                        fadeOut(tween(160, easing = FastOutSlowInEasing))
+                                },
+                                label = "tabSwitch"
+                            ) { t ->
+                                when (t) {
+                                    0 -> DashboardScreen()
+                                    1 -> ConsoleScreen()
+                                    2 -> FilesScreen()
+                                    3 -> DatabaseScreen()
+                                    else -> SetupScreen()
+                                }
+                            }
                         }
                     }
                 }
@@ -141,7 +166,7 @@ fun OmpRoot() {
         // Dialog update (hanya muncul kalau ada versi baru; error cek otomatis diam-diam).
         val avail = updateState as? UpdateCheck.Available
         if (avail != null) {
-            AlertDialog(
+            AnimatedAlertDialog(
                 onDismissRequest = { Updater.reset() },
                 title = { Text("Update tersedia: v${avail.version}") },
                 text = { Text("OmpHub-CEF v${avail.version} sudah rilis (${humanSize(avail.size)}). Unduh dan install sekarang?") },
@@ -155,7 +180,7 @@ fun OmpRoot() {
         }
         val downloading = updateState as? UpdateCheck.Downloading
         if (downloading != null) {
-            AlertDialog(
+            AnimatedAlertDialog(
                 onDismissRequest = {},
                 title = { Text("Mengunduh update…") },
                 text = {
@@ -166,9 +191,7 @@ fun OmpRoot() {
                         )
                         Text("${downloading.progress}%", modifier = Modifier.padding(top = 8.dp))
                     }
-                },
-                confirmButton = {},
-                dismissButton = {}
+                }
             )
         }
     }

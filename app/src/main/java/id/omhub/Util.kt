@@ -112,6 +112,10 @@ fun downloadFile(url: String, dest: File, onProgress: (done: Long, total: Long) 
         }
         dest.delete()
         if (!part.renameTo(dest)) throw IOException("Gagal memindahkan file unduhan")
+    } catch (e: IOException) {
+        // Jangan sisakan file .part setengah unduhan.
+        part.delete()
+        throw e
     } finally {
         c.disconnect()
     }

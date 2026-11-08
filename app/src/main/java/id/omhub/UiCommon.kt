@@ -49,8 +49,20 @@ fun StateChip(label: String, state: RunState) {
 @Composable
 fun LogView(lines: List<String>, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
+    // Auto-scroll halus ke baris terbaru (bukan lompat mendadak).
     LaunchedEffect(lines.size) {
-        if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex)
+        if (lines.isNotEmpty()) runCatching { listState.animateScrollToItem(lines.lastIndex) }
+    }
+    if (lines.isEmpty()) {
+        Column(modifier, verticalArrangement = Arrangement.Center) {
+            Text(
+                "Belum ada log. Jalankan server untuk melihat output di sini.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
+        return
     }
     LazyColumn(modifier, state = listState) {
         items(lines.size) { i ->

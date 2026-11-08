@@ -2,6 +2,10 @@ package id.omphub
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -187,26 +191,31 @@ fun DatabaseScreen() {
             .padding(horizontal = 6.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 6 }
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Database", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    if (dbReady) "phpMyAdmin berjalan di dalam OmpHub."
-                    else if (!setup.db) "MariaDB/phpMyAdmin belum terpasang. Setup akan menyiapkannya."
-                    else if (dbState == RunState.STARTING) "Menjalankan MariaDB dan phpMyAdmin..."
-                    else "Menyiapkan koneksi database...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Database", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        if (dbReady) "phpMyAdmin berjalan di dalam OmpHub."
+                        else if (!setup.db) "MariaDB/phpMyAdmin belum terpasang. Setup akan menyiapkannya."
+                        else if (dbState == RunState.STARTING) "Menjalankan MariaDB dan phpMyAdmin..."
+                        else "Menyiapkan koneksi database...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                OutlinedButton(
+                    onClick = { webView?.reload() },
+                    enabled = dbReady && !busy
+                ) { Text("Refresh") }
             }
-            OutlinedButton(
-                onClick = { webView?.reload() },
-                enabled = dbReady && !busy
-            ) { Text("Refresh") }
         }
 
         Row(
@@ -243,6 +252,7 @@ fun DatabaseScreen() {
             )
         }
 
+        StaggeredItem(1, Modifier.fillMaxWidth()) {
         credentials?.let { db ->
             fun copy(label: String, value: String) {
                 clipboardManager.setText(AnnotatedString(value))
@@ -286,6 +296,7 @@ fun DatabaseScreen() {
                     )
                 }
             }
+        }
         }
 
         Row(
@@ -334,10 +345,14 @@ fun DatabaseScreen() {
                     )
                 }
             }
-        } else Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        } else AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(tween(300))
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
             AndroidView(
                 modifier = Modifier.weight(1f).height(webHeight),
                 factory = { ctx ->
@@ -383,6 +398,7 @@ fun DatabaseScreen() {
                     contentDescription = "Geser di sini untuk scroll halaman",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
             }
         }
     }

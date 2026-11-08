@@ -1,5 +1,8 @@
 package id.omphub
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +39,8 @@ fun ConsoleScreen() {
     val scope = rememberCoroutineScope()
     var input by remember { mutableStateOf("") }
     var mode by remember { mutableIntStateOf(0) } // 0 buat stdin, 1 buat RCON
+    val pressSend = rememberPressSource()
+    val pressClear = rememberPressSource()
 
     fun send() {
         val cmd = input.trim()
@@ -54,11 +59,20 @@ fun ConsoleScreen() {
     }
 
     Column(Modifier.fillMaxSize().padding(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("stdin") })
-            FilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("RCON") })
-            Text("${st.engine.label}: ${game.name.lowercase()}", modifier = Modifier.weight(1f))
-            IconButton(onClick = { Controller.gameLog.clear() }) { Icon(Icons.Default.Delete, "Bersihkan") }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it / 6 }
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = mode == 0, onClick = { mode = 0 }, label = { Text("stdin") })
+                FilterChip(selected = mode == 1, onClick = { mode = 1 }, label = { Text("RCON") })
+                Text("${st.engine.label}: ${game.name.lowercase()}", modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { Controller.gameLog.clear() },
+                    modifier = Modifier.pressScale(pressClear),
+                    interactionSource = pressClear
+                ) { Icon(Icons.Default.Delete, "Bersihkan") }
+            }
         }
         LogView(lines, Modifier.weight(1f).fillMaxWidth())
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -69,7 +83,12 @@ fun ConsoleScreen() {
                 singleLine = true,
                 placeholder = { Text(if (mode == 0) "perintah konsol" else "perintah RCON") }
             )
-            IconButton(onClick = { send() }) { Icon(Icons.Default.Send, "Kirim") }
+            IconButton(
+                onClick = { send() },
+                enabled = input.isNotBlank(),
+                modifier = Modifier.pressScale(pressSend),
+                interactionSource = pressSend
+            ) { Icon(Icons.Default.Send, "Kirim") }
         }
     }
 }

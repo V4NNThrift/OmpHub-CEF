@@ -106,7 +106,7 @@ object OpenMpInstaller {
         val bin = tmp.walkTopDown().firstOrNull { it.isFile && it.name == "omp-server" }
             ?: error("omp-server tidak ada di arsip. Cek URL rilis open.mp di Setup.")
 
-        mergeCopy(bin.parentFile!!, Env.serverDir)
+        mergeCopy(bin.parentFile ?: error("Folder arsip tidak ditemukan"), Env.serverDir)
         listOf("gamemodes", "filterscripts", "scriptfiles", "plugins", "components").forEach {
             File(Env.serverDir, it).mkdirs()
         }

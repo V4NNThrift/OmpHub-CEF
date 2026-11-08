@@ -134,7 +134,7 @@ object SampInstaller {
             ?: error("samp03svr tidak ada di arsip. Cek URL server SA-MP di Setup.")
 
         val cfgExisted = ServerType.SAMP.configFile.exists()
-        OpenMpInstaller.mergeCopy(bin.parentFile!!, Env.serverDir)
+        OpenMpInstaller.mergeCopy(bin.parentFile ?: error("Folder arsip tidak ditemukan"), Env.serverDir)
         listOf("gamemodes", "filterscripts", "scriptfiles", "plugins", "npcmodes").forEach {
             File(Env.serverDir, it).mkdirs()
         }
