@@ -1,6 +1,7 @@
 package id.omphub
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,8 +21,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -30,17 +34,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -49,19 +56,28 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @Composable
 fun DashboardScreen() {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val game by Controller.gameState.collectAsStateWithLifecycle()
     val db by Controller.dbState.collectAsStateWithLifecycle()
     val st by Controller.setupStatus.collectAsStateWithLifecycle()
     val perf by PerfMonitor.snapshot.collectAsStateWithLifecycle()
+    val gameLines by Controller.gameLog.lines.collectAsStateWithLifecycle()
     var queryMs by remember { mutableStateOf<Long?>(null) }
     var info by remember { mutableStateOf<Samp.Info?>(null) }
-    var players by remember { mutableStateOf(emptyList<Samp.Player>()) }
+    var players by remember { mutableStateOf(emptyList<Samp.DetailedPlayer>()) }
+    var showQr by remember { mutableStateOf<String?>(null) }
+    var confirmAction by remember { mutableStateOf<Pair<String, Samp.DetailedPlayer>?>(null) }
 
     LaunchedEffect(Unit) {
         PerfMonitor.ensureStarted()
@@ -73,7 +89,10 @@ fun DashboardScreen() {
                 val started = System.nanoTime()
                 val serverInfo = Samp.info(Prefs.port)
                 val elapsed = (System.nanoTime() - started) / 1_000_000
-                Triple(serverInfo, Samp.players(Prefs.port), if (serverInfo != null) elapsed else null)
+                val detailed = Samp.playersDetailed(Prefs.port)
+                val list = if (detailed.isNotEmpty()) detailed
+                    else Samp.players(Prefs.port).map { Samp.DetailedPlayer(-1, it.name, it.score, it.ping) }
+                Triple(serverInfo, list, if (serverInfo != null) elapsed else null)
             }
             info = result.first
             players = result.second
@@ -202,7 +221,31 @@ fun DashboardScreen() {
                 val ips = localIps()
                 if (ips.isNotEmpty()) InfoLine("LAN address", ips.joinToString { "$it:${Prefs.port}" })
                 InfoLine("Local", "127.0.0.1:${Prefs.port}")
+                val lanAddr = primaryLanAddress()
+                if (lanAddr != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { showQr = lanAddr },
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Icon(Icons.Default.QrCode, contentDescription = null); Text("QR") }
+                        OutlinedButton(
+                            onClick = { shareServerAddress(ctx, lanAddr) },
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Icon(Icons.Default.Share, contentDescription = null); Text("Bagikan") }
+                        OutlinedButton(
+                            onClick = { copyText(ctx, "Alamat server", lanAddr) },
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Salin") }
+                    }
+                }
             }
+        }
+
+        if (st.engine == ServerType.OMP) {
+            CefStatusCard(running, gameLines)
         }
 
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
@@ -219,14 +262,88 @@ fun DashboardScreen() {
                     if (players.isEmpty()) Text("Belum ada pemain online.", color = Mac.Secondary, fontSize = 12.sp)
                     players.forEach { player ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(player.name, Modifier.weight(1f), color = Mac.Text, fontSize = 13.sp)
-                            Text("${player.score} • ${player.ping} ms", color = Mac.Secondary, fontSize = 11.sp)
+                            Column(Modifier.weight(1f)) {
+                                Text(player.name, color = Mac.Text, fontSize = 13.sp)
+                                Text("${player.score} • ${player.ping} ms", color = Mac.Secondary, fontSize = 11.sp)
+                            }
+                            if (player.id >= 0) {
+                                TextButton(onClick = { confirmAction = "kick" to player }) {
+                                    Text("Kick", color = Mac.Blue, fontSize = 12.sp)
+                                }
+                                TextButton(onClick = { confirmAction = "ban" to player }) {
+                                    Text("Ban", color = Mac.Red, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+
+    // Dialog QR alamat server.
+    showQr?.let { addr ->
+        AlertDialog(
+            onDismissRequest = { showQr = null },
+            title = { Text("Scan untuk join") },
+            text = {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    val bmp = remember(addr) { qrBitmap(addr, 512) }
+                    if (bmp != null) {
+                        Image(
+                            bmp.asImageBitmap(),
+                            contentDescription = "QR alamat server",
+                            modifier = Modifier.size(230.dp).clip(RoundedCornerShape(12.dp))
+                                .background(Color.White).padding(8.dp)
+                        )
+                    }
+                    Text(addr, color = Mac.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Satu WiFi yang sama dengan HP ini.", color = Mac.Secondary, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { shareServerAddress(ctx, addr) }) { Text("Bagikan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQr = null }) { Text("Tutup") }
+            }
+        )
+    }
+
+    // Dialog konfirmasi kick / ban (via RCON).
+    confirmAction?.let { (action, player) ->
+        AlertDialog(
+            onDismissRequest = { confirmAction = null },
+            title = { Text("${action.replaceFirstChar { it.uppercase() }} ${player.name}?") },
+            text = {
+                Text(
+                    if (action == "ban") "Pemain akan di-ban dari server (masuk bans.json)."
+                    else "Pemain akan dikeluarkan dari server."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmAction = null
+                    scope.launch(Dispatchers.IO) {
+                        val out = Controller.rcon("$action ${player.id}")
+                        val reply = out.firstOrNull()?.take(120)
+                        toast(ctx, "Perintah $action dikirim ke ${player.name}" + (reply?.let { ": $it" } ?: ""))
+                    }
+                }) {
+                    Text(
+                        action.replaceFirstChar { it.uppercase() },
+                        color = if (action == "ban") Mac.Red else Mac.Blue
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmAction = null }) { Text("Batal") }
+            }
+        )
     }
 }
 
@@ -262,3 +379,42 @@ private fun InfoLine(label: String, value: String) {
         Text(value, color = Mac.Text, fontSize = 12.sp)
     }
 }
+
+/**
+ * Status CEF: port 7060 (dari log server), ukuran + jumlah file fivem.pak
+ * (dari fivem.pak.manifest), dan waktu pack terakhir (timestamp file pak).
+ * Hanya tampil kalau server open.mp dan file pak ada.
+ */
+@Composable
+private fun CefStatusCard(running: Boolean, gameLines: List<String>) {
+    val pak = File(Env.serverDir, "scriptfiles/cef/fivem.pak")
+    if (!pak.exists()) return
+    val manifest = File(Env.serverDir, "scriptfiles/cef/fivem.pak.manifest")
+    var fileCount by remember { mutableStateOf<Int?>(null) }
+    var cefSeen by remember { mutableStateOf(false) }
+    LaunchedEffect(pak.lastModified()) {
+        fileCount = withContext(Dispatchers.IO) {
+            runCatching { JSONObject(manifest.readText()).getJSONObject("files").length() }.getOrNull()
+        }
+    }
+    LaunchedEffect(running) { if (!running) cefSeen = false }
+    LaunchedEffect(gameLines) {
+        if (gameLines.any { it.contains("Network Server started successfully on port 7060") }) cefSeen = true
+    }
+    val status = when {
+        !running -> "Server berhenti"
+        cefSeen -> "CEF OK • port 7060"
+        else -> "Menunggu CEF…"
+    }
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Mac.Panel)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+            Text("CEF", color = Mac.Text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(status, color = if (running && cefSeen) Mac.Green else Mac.Text, fontSize = 13.sp)
+            InfoLine("fivem.pak", "${fileCount?.let { "$it file" } ?: "—"} • ${humanSize(pak.length())}")
+            InfoLine("Pack terakhir", fmtPakTime(pak.lastModified()))
+        }
+    }
+}
+
+private fun fmtPakTime(ms: Long): String =
+    SimpleDateFormat("d MMM yyyy, HH:mm", Locale("id")).format(Date(ms))

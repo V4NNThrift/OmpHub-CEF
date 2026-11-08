@@ -12,8 +12,8 @@ android {
         applicationId = "id.omphub"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -70,4 +70,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.apache.commons:commons-compress:1.26.2")
     implementation("org.tukaani:xz:1.10")
+    implementation("com.google.zxing:core:3.5.2")
 }

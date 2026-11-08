@@ -1,5 +1,9 @@
 package id.omphub
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
@@ -25,6 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,9 +44,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
+import java.io.File
 
 @Composable
 fun SetupScreen() {
@@ -55,6 +65,26 @@ fun SetupScreen() {
     var sampDlUrl by remember { mutableStateOf(Prefs.urlSampDl) }
     var backups by remember { mutableStateOf(Controller.listBackups()) }
     var refreshTick by remember { mutableIntStateOf(0) }
+    var restoreTarget by remember { mutableStateOf<File?>(null) }
+    val upd by Updater.state.collectAsStateWithLifecycle()
+    val darkTheme by ThemeState.dark.collectAsStateWithLifecycle()
+
+    val restorePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val tmp = File(Env.tmpDir, "restore-picked.zip")
+                runCatching {
+                    ctx.contentResolver.openInputStream(uri)?.use { i ->
+                        tmp.outputStream().use { o -> i.copyTo(o) }
+                    } ?: error("Tidak bisa membaca file")
+                }.onSuccess {
+                    withContext(Dispatchers.Main) { restoreTarget = tmp }
+                }.onFailure {
+                    toast(ctx, "Gagal membaca file: ${it.message}")
+                }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) { Controller.refreshStatus() }
     LaunchedEffect(busy, refreshTick) { Controller.refreshStatus(); backups = Controller.listBackups() }
@@ -150,19 +180,72 @@ fun SetupScreen() {
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Tema", style = MaterialTheme.typography.titleMedium)
+                Text("Tampilan macOS, pilih gelap atau terang.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    if (darkTheme) {
+                        Button(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f)) { Text("Gelap") }
+                    } else {
+                        OutlinedButton(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f)) { Text("Gelap") }
+                    }
+                    if (!darkTheme) {
+                        Button(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f)) { Text("Terang") }
+                    } else {
+                        OutlinedButton(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f)) { Text("Terang") }
+                    }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Update aplikasi", style = MaterialTheme.typography.titleMedium)
+                Text("Versi terpasang: ${Updater.currentVersion(ctx)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    when (upd) {
+                        is UpdateCheck.Idle -> "Belum pernah memeriksa update."
+                        is UpdateCheck.Checking -> "Memeriksa update…"
+                        is UpdateCheck.UpToDate -> "Sudah versi terbaru."
+                        is UpdateCheck.Available -> "Update tersedia: v${(upd as UpdateCheck.Available).version}."
+                        is UpdateCheck.Downloading -> "Mengunduh update… ${(upd as UpdateCheck.Downloading).progress}%"
+                        is UpdateCheck.ReadyToInstall -> "Unduhan selesai. Lanjutkan install."
+                        is UpdateCheck.Error -> "Gagal memeriksa: ${(upd as UpdateCheck.Error).message}"
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { Updater.check(ctx) }) { Text("Periksa update") }
+                    if (upd is UpdateCheck.Available) {
+                        Button(onClick = { Updater.downloadAndInstall(ctx) }) { Text("Unduh & Install") }
+                    }
+                    if (upd is UpdateCheck.ReadyToInstall) {
+                        Button(onClick = { Updater.installApk(ctx, (upd as UpdateCheck.ReadyToInstall).file) }) { Text("Install") }
+                    }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Backup", style = MaterialTheme.typography.titleMedium)
                 Text("Simpan salinan folder server dan database agar bisa dipulihkan kapan saja.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(
-                    onClick = {
-                        scope.launch(Dispatchers.IO) {
-                            runCatching { Controller.createBackup() }
-                                .onSuccess { toast(ctx, "Backup berhasil: ${it.name}") }
-                                .onFailure { toast(ctx, "Backup gagal: ${it.message}") }
-                            refreshTick++
-                        }
-                    },
-                    enabled = !busy
-                ) { Text("Buat backup sekarang") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            scope.launch(Dispatchers.IO) {
+                                runCatching { Controller.createBackup() }
+                                    .onSuccess { toast(ctx, "Backup berhasil: ${it.name} (${humanSize(it.length())})") }
+                                    .onFailure { toast(ctx, "Backup gagal: ${it.message}") }
+                                refreshTick++
+                            }
+                        },
+                        enabled = !busy
+                    ) { Text("Buat backup sekarang") }
+                    OutlinedButton(
+                        onClick = { restorePicker.launch(arrayOf("application/zip")) },
+                        enabled = game == RunState.STOPPED && !busy
+                    ) { Text("Pilih file backup…") }
+                }
                 if (backups.isEmpty()) Text("Belum ada backup.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 backups.forEach { file ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -171,16 +254,20 @@ fun SetupScreen() {
                             Text(humanSize(file.length()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         OutlinedButton(
-                            onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    runCatching { Controller.restoreBackup(file) }
-                                        .onSuccess { toast(ctx, it) }
-                                        .onFailure { toast(ctx, "Restore gagal: ${it.message}") }
-                                    refreshTick++
-                                }
-                            },
+                            onClick = { restoreTarget = file },
                             enabled = game == RunState.STOPPED && !busy
                         ) { Text("Restore") }
+                        IconButton(onClick = {
+                            val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/zip"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            ctx.startActivity(Intent.createChooser(intent, "Bagikan backup"))
+                        }) {
+                            Icon(Icons.Default.Share, contentDescription = "Bagikan backup")
+                        }
                         IconButton(onClick = { file.delete(); refreshTick++ }) {
                             Icon(Icons.Default.Delete, contentDescription = "Hapus backup")
                         }
@@ -242,5 +329,28 @@ fun SetupScreen() {
                 }
             }
         }
+    }
+
+    // Konfirmasi sebelum restore: folder server akan ditimpa isi backup.
+    restoreTarget?.let { file ->
+        AlertDialog(
+            onDismissRequest = { restoreTarget = null },
+            title = { Text("Pulihkan ${file.name}?") },
+            text = { Text("Folder server akan ditimpa dengan isi backup ini. Pastikan server sudah berhenti.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    restoreTarget = null
+                    scope.launch(Dispatchers.IO) {
+                        runCatching { Controller.restoreBackup(file) }
+                            .onSuccess { toast(ctx, it) }
+                            .onFailure { toast(ctx, "Restore gagal: ${it.message}") }
+                        refreshTick++
+                    }
+                }) { Text("Pulihkan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { restoreTarget = null }) { Text("Batal") }
+            }
+        )
     }
 }

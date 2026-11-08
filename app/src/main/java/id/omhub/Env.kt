@@ -101,6 +101,9 @@ object Prefs {
     var dbEnabled: Boolean
         get() = sp.getBoolean("dbEnabled", true)
         set(v) = sp.edit().putBoolean("dbEnabled", v).apply()
+    var themeDark: Boolean
+        get() = sp.getBoolean("themeDark", true)
+        set(v) = sp.edit().putBoolean("themeDark", v).apply()
     var sampVersion: SampVersion
         get() = SampVersion.from(sp.getString("sampVersion", null))
         set(v) = sp.edit().putString("sampVersion", v.code).apply()

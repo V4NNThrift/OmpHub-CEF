@@ -10,6 +10,7 @@ import java.nio.ByteOrder
 object Samp {
     data class Info(val password: Boolean, val players: Int, val maxPlayers: Int, val name: String, val mode: String, val language: String)
     data class Player(val name: String, val score: Int, val ping: Int)
+    data class DetailedPlayer(val id: Int, val name: String, val score: Int, val ping: Int)
 
     private val LOCAL = byteArrayOf(127, 0, 0, 1)
 
@@ -67,6 +68,21 @@ object Samp {
                 val a = ByteArray(len)
                 b.get(a)
                 Player(String(a, Charsets.UTF_8), b.int, b.int)
+            }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    /** Daftar pemain lengkap dengan playerid (paket query 'd'). Dipakai untuk kick/ban via RCON. */
+    fun playersDetailed(port: Int): List<DetailedPlayer> {
+        val b = exchange(port, 'd') ?: return emptyList()
+        return try {
+            val n = b.short.toInt() and 0xFFFF
+            List(n) {
+                val id = b.get().toInt() and 0xFF
+                val len = b.get().toInt() and 0xFF
+                val a = ByteArray(len)
+                b.get(a)
+                DetailedPlayer(id, String(a, Charsets.UTF_8), b.int, b.int)
             }
         } catch (_: Exception) { emptyList() }
     }
