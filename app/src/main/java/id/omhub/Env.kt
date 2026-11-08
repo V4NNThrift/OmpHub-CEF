@@ -117,6 +117,10 @@ object Prefs {
     var notifyEvents: Boolean
         get() = sp.getBoolean("notifyEvents", true)
         set(v) = sp.edit().putBoolean("notifyEvents", v).apply()
+    /** Mode Desktop untuk WebView phpMyAdmin (UA desktop + wide viewport). */
+    var phpMyAdminDesktopMode: Boolean
+        get() = sp.getBoolean("phpMyAdminDesktopMode", false)
+        set(v) = sp.edit().putBoolean("phpMyAdminDesktopMode", v).apply()
     var sampVersion: SampVersion
         get() = SampVersion.from(sp.getString("sampVersion", null))
         set(v) = sp.edit().putString("sampVersion", v.code).apply()

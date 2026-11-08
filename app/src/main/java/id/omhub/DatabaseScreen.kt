@@ -34,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +52,7 @@ import android.net.Uri
 import android.os.Parcel
 import android.os.Bundle
 import android.webkit.WebChromeClient
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.ui.viewinterop.AndroidView
@@ -62,6 +64,28 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private const val PHPMYADMIN_URL = "http://127.0.0.1:8080/phpmyadmin/"
+
+/** User-Agent Chrome desktop untuk Mode Desktop phpMyAdmin. */
+private const val DESKTOP_USER_AGENT =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+/** Terapkan Mode Desktop (UA desktop + wide viewport + pinch-to-zoom) atau kembalikan ke mobile. */
+private fun applyPhpMyAdminMode(view: WebView, desktop: Boolean, defaultUa: String) {
+    view.settings.apply {
+        if (desktop) {
+            userAgentString = DESKTOP_USER_AGENT
+            useWideViewPort = true
+            loadWithOverviewMode = true
+        } else {
+            userAgentString = defaultUa
+            useWideViewPort = false
+            loadWithOverviewMode = false
+        }
+        setSupportZoom(true)
+        builtInZoomControls = true
+        displayZoomControls = false
+    }
+}
 
 private const val PHPMYADMIN_STATE_FILE = "phpmyadmin_webview_state.bin"
 
@@ -182,6 +206,18 @@ fun DatabaseScreen() {
     val dbReady = setup.db && dbState == RunState.RUNNING
     var webView by remember { mutableStateOf<WebView?>(null) }
     val webHeight = (LocalConfiguration.current.screenHeightDp * 0.9f).dp
+    // UA bawaan perangkat (untuk kembali ke tampilan mobile) + pilihan Mode Desktop yang tersimpan.
+    val defaultUa = remember(context) { WebSettings.getDefaultUserAgent(context) }
+    var desktopMode by remember { mutableStateOf(Prefs.phpMyAdminDesktopMode) }
+
+    fun setDesktopMode(enabled: Boolean) {
+        desktopMode = enabled
+        Prefs.phpMyAdminDesktopMode = enabled
+        webView?.let { view ->
+            applyPhpMyAdminMode(view, enabled, defaultUa)
+            view.reload()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -349,6 +385,25 @@ fun DatabaseScreen() {
             visible = true,
             enter = fadeIn(tween(300))
         ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Mode Desktop", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (desktopMode) "phpMyAdmin tampil seperti di PC (lebar penuh)."
+                        else "phpMyAdmin tampil versi mobile.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = desktopMode, onCheckedChange = { setDesktopMode(it) })
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -362,6 +417,7 @@ fun DatabaseScreen() {
                         settings.databaseEnabled = true
                         settings.loadsImagesAutomatically = true
                         settings.javaScriptCanOpenWindowsAutomatically = true
+                        applyPhpMyAdminMode(this, desktopMode, defaultUa)
                         webViewClient = WebViewClient()
                         setOnTouchListener { v, _ -> v.parent?.requestDisallowInterceptTouchEvent(true); false }
                         webChromeClient = WebChromeClient()
@@ -398,6 +454,7 @@ fun DatabaseScreen() {
                     contentDescription = "Geser di sini untuk scroll halaman",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
             }
             }
         }
