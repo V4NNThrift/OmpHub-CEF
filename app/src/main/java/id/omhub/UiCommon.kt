@@ -113,19 +113,6 @@ fun tailscaleIp(): String? = runCatching {
     }
 }.getOrNull()
 
-/** Durasi sejak [startElapsedMs] (SystemClock.elapsedRealtime) — mis. "2j 15m", "45d". */
-fun fmtUptime(startElapsedMs: Long): String {
-    val s = ((android.os.SystemClock.elapsedRealtime() - startElapsedMs) / 1000).coerceAtLeast(0)
-    val h = s / 3600
-    val m = (s % 3600) / 60
-    val sec = s % 60
-    return when {
-        h > 0 -> "${h}j ${m}m"
-        m > 0 -> "${m}m ${sec}d"
-        else -> "${sec}d"
-    }
-}
-
 fun humanSize(b: Long): String = when {
     b < 1024 -> "$b B"
     b < 1024 * 1024 -> "${b / 1024} KB"

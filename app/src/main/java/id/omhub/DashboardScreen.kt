@@ -1,5 +1,6 @@
 package id.omphub
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -269,7 +270,7 @@ fun DashboardScreen() {
                     InfoLine("Engine", st.engine.label)
                     InfoLine("UDP port", Prefs.port.toString())
                     if (running && Controller.gameStartedAt > 0) {
-                        InfoLine("Uptime", fmtUptime(Controller.gameStartedAt))
+                        InfoLine("Uptime", fmtUptime(SystemClock.elapsedRealtime() - Controller.gameStartedAt))
                     }
                     InfoLine("Gamemode", serverInfo?.mode ?: "—")
                     InfoLine("Language", serverInfo?.language ?: "—")
