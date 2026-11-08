@@ -1,0 +1,41 @@
+name: build-apk
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Ambil binary proot/qemu + rootfs game
+        env:
+          QEMU_VERSION: "8.2.2"
+          QEMU_SOURCE: "ubuntu"
+        run: bash scripts/fetch-binaries.sh
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Bangun rootfs MariaDB (Alpine arm64)
+        run: bash scripts/build-mariadb-rootfs.sh
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Siapkan keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/omphub.jks"
+      - name: Build APK release
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/omphub.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle :app:assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OmpHub-release
+          path: app/build/outputs/apk/release/*.apk

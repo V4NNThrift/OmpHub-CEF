@@ -1,0 +1,14 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+build/
+/captures
+.externalNativeBuild
+.cxx
+
+app/src/main/jniLibs/arm64-v8a/*.so
+
+app/src/main/assets/rootfs-game.tar.gz
+app/src/main/assets/libatomic1-i386.tar.xz
+app/src/main/assets/mariadb-rootfs.tar.xz
