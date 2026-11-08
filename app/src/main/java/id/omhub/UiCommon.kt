@@ -6,19 +6,16 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,26 +25,7 @@ import java.net.Inet4Address
 import java.net.NetworkInterface
 
 @Composable
-fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            content()
-        }
-    }
-}
-
-@Composable
-fun StateChip(label: String, state: RunState) {
-    AssistChip(onClick = {}, label = { Text("$label: ${state.name.lowercase()}") })
-}
-
-@Composable
-fun LogView(lines: List<String>, modifier: Modifier = Modifier) {
+fun LogView(lines: List<String>, modifier: Modifier = Modifier, textColor: Color = MaterialTheme.colorScheme.onSurface) {
     val listState = rememberLazyListState()
     // Auto-scroll halus ke baris terbaru (bukan lompat mendadak).
     LaunchedEffect(lines.size) {
@@ -70,7 +48,8 @@ fun LogView(lines: List<String>, modifier: Modifier = Modifier) {
                 lines[i],
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
-                lineHeight = 14.sp
+                lineHeight = 14.sp,
+                color = textColor
             )
         }
     }

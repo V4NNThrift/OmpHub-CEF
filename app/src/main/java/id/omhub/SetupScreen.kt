@@ -13,45 +13,54 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.runtime.rememberCoroutineScope
 import java.io.File
 
+/**
+ * Setup sebagai System Settings macOS: section ber-header dengan baris
+ * berikon (kotak rounded berwarna) + kontrol di kanan. Semua fungsi lama
+ * tetap ada (mesin server, tema, otomatisasi, update, backup, URL, log).
+ */
 @Composable
 fun SetupScreen() {
     val ctx = LocalContext.current
@@ -73,8 +82,6 @@ fun SetupScreen() {
     var bootAuto by remember { mutableStateOf(Prefs.bootAutoStart) }
     var notifyEv by remember { mutableStateOf(Prefs.notifyEvents) }
     val pressInstall = rememberPressSource()
-    val pressDark = rememberPressSource()
-    val pressLight = rememberPressSource()
     val pressCheckUpd = rememberPressSource()
     val pressBackup = rememberPressSource()
 
@@ -110,52 +117,46 @@ fun SetupScreen() {
     val readyToInstall = st.binaries && st.gameRootfs && !busy && game == RunState.STOPPED
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         StaggeredItem(0, Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Setup", style = MaterialTheme.typography.headlineMedium)
-                Text("Atur mesin server dan URL unduhan open.mp + CEF 7058 atau SA-MP.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Pengaturan", style = MaterialTheme.typography.headlineMedium, color = Mac.Text)
+                Text(
+                    "Atur mesin server dan URL unduhan open.mp + CEF 7058 atau SA-MP.",
+                    style = MaterialTheme.typography.bodyMedium, color = Mac.Secondary
+                )
             }
         }
 
+        // Section: Server.
+        SectionHeader("Server")
         StaggeredItem(1, Modifier.fillMaxWidth()) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("SETUP MESIN SERVER", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    ServerType.entries.forEach { type ->
-                        val selected = st.engine == type
-                        if (selected) {
-                            Button(onClick = { Prefs.serverType = type; Controller.refreshStatus() }, enabled = game == RunState.STOPPED, modifier = Modifier.weight(1f)) {
-                                Text(type.label)
-                            }
-                        } else {
-                            OutlinedButton(onClick = { Prefs.serverType = type; Controller.refreshStatus() }, enabled = game == RunState.STOPPED, modifier = Modifier.weight(1f)) {
-                                Text(type.label)
-                            }
-                        }
-                    }
-                }
+            FrostCard {
+                MacSegmented(
+                    options = ServerType.entries.map { it.label },
+                    selected = ServerType.entries.indexOf(st.engine),
+                    onSelect = { i -> Prefs.serverType = ServerType.entries[i]; Controller.refreshStatus() },
+                    enabled = game == RunState.STOPPED,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (isSamp) {
-                    Text("Versi SA-MP", style = MaterialTheme.typography.titleSmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SampVersion.entries.forEach { version ->
-                            if (sampVer == version) {
-                                Button(onClick = { sampVer = version; Prefs.sampVersion = version }, enabled = game == RunState.STOPPED) { Text(version.label) }
-                            } else {
-                                OutlinedButton(onClick = { sampVer = version; Prefs.sampVersion = version }, enabled = game == RunState.STOPPED) { Text(version.label) }
-                            }
-                        }
-                    }
+                    Text("Versi SA-MP", style = MaterialTheme.typography.titleSmall, color = Mac.Text)
+                    MacSegmented(
+                        options = SampVersion.entries.map { it.label },
+                        selected = SampVersion.entries.indexOf(sampVer),
+                        onSelect = { i -> sampVer = SampVersion.entries[i]; Prefs.sampVersion = sampVer },
+                        enabled = game == RunState.STOPPED,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-                Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Mac.PanelInner
+                ) {
                     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("STATUS INSTALASI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("STATUS INSTALASI", style = MaterialTheme.typography.labelSmall, color = Mac.Secondary)
                         Text(
                             when {
                                 !st.binaries -> "Komponen runtime belum tersedia di APK"
@@ -165,7 +166,7 @@ fun SetupScreen() {
                                 installed -> "$serverName siap digunakan"
                                 else -> "$serverName belum diunduh"
                             },
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium, color = Mac.Text
                         )
                     }
                 }
@@ -173,80 +174,83 @@ fun SetupScreen() {
                     onClick = { Controller.installServer() },
                     enabled = readyToInstall,
                     modifier = Modifier.fillMaxWidth().pressScale(pressInstall),
-                    interactionSource = pressInstall
+                    interactionSource = pressInstall,
+                    shape = RoundedCornerShape(20.dp)
                 ) {
-                    androidx.compose.material3.Icon(Icons.Default.CloudDownload, contentDescription = null)
+                    Icon(Icons.Default.CloudDownload, contentDescription = null)
                     Spacer(Modifier.padding(start = 4.dp))
                     Text(if (installed) "Update $serverName" else "Unduh $serverName")
                 }
                 if (busy) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.height(22.dp))
-                        Text("Sedang menyiapkan server…", style = MaterialTheme.typography.bodySmall)
+                        Text("Sedang menyiapkan server…", style = MaterialTheme.typography.bodySmall, color = Mac.Text)
                     }
                 }
                 if (game != RunState.STOPPED) {
-                    Text("Hentikan server sebelum mengganti atau memperbarui mesin server.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text("Hentikan server sebelum mengganti atau memperbarui mesin server.", color = Mac.Red, style = MaterialTheme.typography.bodySmall)
                 }
                 if (!st.binaries || !st.gameRootfs) {
-                    Text("Runtime dan sistem dasar disiapkan otomatis saat pertama kali aplikasi dijalankan. Pastikan proses persiapan awal sudah selesai.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Runtime dan sistem dasar disiapkan otomatis saat pertama kali aplikasi dijalankan. Pastikan proses persiapan awal sudah selesai.", style = MaterialTheme.typography.bodySmall, color = Mac.Secondary)
                 }
             }
         }
-        }
 
+        // Section: Otomatisasi.
+        SectionHeader("Otomatisasi")
         StaggeredItem(2, Modifier.fillMaxWidth()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Tema", style = MaterialTheme.typography.titleMedium)
-                Text("Tampilan macOS, pilih gelap atau terang.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    if (darkTheme) {
-                        Button(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f).pressScale(pressDark), interactionSource = pressDark) { Text("Gelap") }
-                    } else {
-                        OutlinedButton(onClick = { ThemeState.setDark(true) }, modifier = Modifier.weight(1f).pressScale(pressDark), interactionSource = pressDark) { Text("Gelap") }
-                    }
-                    if (!darkTheme) {
-                        Button(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f).pressScale(pressLight), interactionSource = pressLight) { Text("Terang") }
-                    } else {
-                        OutlinedButton(onClick = { ThemeState.setDark(false) }, modifier = Modifier.weight(1f).pressScale(pressLight), interactionSource = pressLight) { Text("Terang") }
-                    }
+            FrostCard {
+                SettingRow(
+                    Icons.Default.Refresh, Mac.Blue,
+                    "Restart otomatis (watchdog)",
+                    "Server dinyalakan lagi kalau mati sendiri. Maks 5x dalam 10 menit."
+                ) {
+                    Switch(checked = watchdog, onCheckedChange = { watchdog = it; Prefs.watchdogEnabled = it })
+                }
+                HorizontalDivider(color = Mac.Border.copy(alpha = 0.4f))
+                SettingRow(
+                    Icons.Default.PowerSettingsNew, Mac.Green,
+                    "Start otomatis saat HP nyala",
+                    "Server jalan sendiri setelah HP selesai restart."
+                ) {
+                    Switch(checked = bootAuto, onCheckedChange = { bootAuto = it; Prefs.bootAutoStart = it })
+                }
+                HorizontalDivider(color = Mac.Border.copy(alpha = 0.4f))
+                SettingRow(
+                    Icons.Default.Notifications, Mac.Yellow,
+                    "Notifikasi pemain & server",
+                    "Beri tahu saat pemain join/leave atau server mati mendadak."
+                ) {
+                    Switch(checked = notifyEv, onCheckedChange = { notifyEv = it; Prefs.notifyEvents = it })
                 }
             }
         }
-        }
 
+        // Section: Tampilan.
+        SectionHeader("Tampilan")
         StaggeredItem(3, Modifier.fillMaxWidth()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Otomatisasi & notifikasi", style = MaterialTheme.typography.titleMedium)
-                SwitchRow(
-                    title = "Restart otomatis (watchdog)",
-                    desc = "Server dinyalakan lagi kalau mati sendiri. Maks 5x dalam 10 menit.",
-                    checked = watchdog,
-                    onChange = { watchdog = it; Prefs.watchdogEnabled = it }
-                )
-                SwitchRow(
-                    title = "Start otomatis saat HP nyala",
-                    desc = "Server jalan sendiri setelah HP selesai restart.",
-                    checked = bootAuto,
-                    onChange = { bootAuto = it; Prefs.bootAutoStart = it }
-                )
-                SwitchRow(
-                    title = "Notifikasi pemain & server",
-                    desc = "Beri tahu saat pemain join/leave atau server mati mendadak.",
-                    checked = notifyEv,
-                    onChange = { notifyEv = it; Prefs.notifyEvents = it }
-                )
+            FrostCard {
+                SettingRow(
+                    Icons.Default.Palette, Mac.Blue,
+                    "Tema",
+                    "Tampilan macOS, pilih gelap atau terang."
+                ) {
+                    MacSegmented(
+                        options = listOf("Gelap", "Terang"),
+                        selected = if (darkTheme) 0 else 1,
+                        onSelect = { ThemeState.setDark(it == 0) },
+                        modifier = Modifier.width(150.dp)
+                    )
+                }
             }
         }
-        }
 
+        // Section: Update.
+        SectionHeader("Update")
         StaggeredItem(4, Modifier.fillMaxWidth()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Update aplikasi", style = MaterialTheme.typography.titleMedium)
-                Text("Versi terpasang: ${Updater.currentVersion(ctx)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FrostCard {
+                Text("Update aplikasi", style = MaterialTheme.typography.titleMedium, color = Mac.Text)
+                Text("Versi terpasang: ${Updater.currentVersion(ctx)}", style = MaterialTheme.typography.bodySmall, color = Mac.Secondary)
                 Text(
                     when (upd) {
                         is UpdateCheck.Idle -> "Belum pernah memeriksa update."
@@ -257,36 +261,37 @@ fun SetupScreen() {
                         is UpdateCheck.ReadyToInstall -> "Unduhan selesai. Lanjutkan install."
                         is UpdateCheck.Error -> "Gagal memeriksa: ${(upd as UpdateCheck.Error).message}"
                     },
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.bodySmall, color = Mac.Text
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { Updater.check(ctx) },
                         modifier = Modifier.pressScale(pressCheckUpd),
-                        interactionSource = pressCheckUpd
+                        interactionSource = pressCheckUpd,
+                        shape = RoundedCornerShape(20.dp)
                     ) { Text("Periksa update") }
                     if (upd is UpdateCheck.Available) {
-                        Button(onClick = { Updater.downloadAndInstall(ctx) }) { Text("Unduh & Install") }
+                        Button(onClick = { Updater.downloadAndInstall(ctx) }, shape = RoundedCornerShape(20.dp)) { Text("Unduh & Install") }
                     }
                     if (upd is UpdateCheck.ReadyToInstall) {
-                        Button(onClick = { Updater.installApk(ctx, (upd as UpdateCheck.ReadyToInstall).file) }) { Text("Install") }
+                        Button(onClick = { Updater.installApk(ctx, (upd as UpdateCheck.ReadyToInstall).file) }, shape = RoundedCornerShape(20.dp)) { Text("Install") }
                     }
                 }
                 if (upd is UpdateCheck.Checking) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                        Text("Memeriksa update…", style = MaterialTheme.typography.bodySmall)
+                        Text("Memeriksa update…", style = MaterialTheme.typography.bodySmall, color = Mac.Text)
                     }
                 }
             }
         }
-        }
 
+        // Section: Backup.
+        SectionHeader("Backup")
         StaggeredItem(5, Modifier.fillMaxWidth()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Backup", style = MaterialTheme.typography.titleMedium)
-                Text("Simpan salinan folder server dan database agar bisa dipulihkan kapan saja.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FrostCard {
+                Text("Backup", style = MaterialTheme.typography.titleMedium, color = Mac.Text)
+                Text("Simpan salinan folder server dan database agar bisa dipulihkan kapan saja.", style = MaterialTheme.typography.bodySmall, color = Mac.Secondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = {
@@ -299,23 +304,26 @@ fun SetupScreen() {
                         },
                         enabled = !busy,
                         modifier = Modifier.pressScale(pressBackup),
-                        interactionSource = pressBackup
+                        interactionSource = pressBackup,
+                        shape = RoundedCornerShape(20.dp)
                     ) { Text("Buat backup sekarang") }
                     OutlinedButton(
                         onClick = { restorePicker.launch(arrayOf("application/zip")) },
-                        enabled = game == RunState.STOPPED && !busy
+                        enabled = game == RunState.STOPPED && !busy,
+                        shape = RoundedCornerShape(20.dp)
                     ) { Text("Pilih file backup…") }
                 }
-                if (backups.isEmpty()) Text("Belum ada backup.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (backups.isEmpty()) Text("Belum ada backup.", color = Mac.Secondary)
                 backups.forEach { file ->
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(file.name, style = MaterialTheme.typography.bodyMedium)
-                            Text(humanSize(file.length()), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(file.name, style = MaterialTheme.typography.bodyMedium, color = Mac.Text)
+                            Text(humanSize(file.length()), style = MaterialTheme.typography.bodySmall, color = Mac.Secondary)
                         }
                         OutlinedButton(
                             onClick = { restoreTarget = file },
-                            enabled = game == RunState.STOPPED && !busy
+                            enabled = game == RunState.STOPPED && !busy,
+                            shape = RoundedCornerShape(20.dp)
                         ) { Text("Restore") }
                         IconButton(onClick = {
                             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
@@ -326,23 +334,23 @@ fun SetupScreen() {
                             }
                             ctx.startActivity(Intent.createChooser(intent, "Bagikan backup"))
                         }) {
-                            Icon(Icons.Default.Share, contentDescription = "Bagikan backup")
+                            Icon(Icons.Default.Share, contentDescription = "Bagikan backup", tint = Mac.Blue)
                         }
                         IconButton(onClick = { file.delete(); refreshTick++ }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Hapus backup")
+                            Icon(Icons.Default.Delete, contentDescription = "Hapus backup", tint = Mac.Red)
                         }
                     }
                 }
-                Text("Lokasi: ${Env.backupDir.absolutePath}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Lokasi: ${Env.backupDir.absolutePath}", style = MaterialTheme.typography.bodySmall, color = Mac.Secondary)
             }
         }
-        }
 
+        // Section: URL unduhan.
+        SectionHeader("URL unduhan")
         StaggeredItem(6, Modifier.fillMaxWidth()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("URL unduhan", style = MaterialTheme.typography.titleMedium)
-                Text("Masukkan direct URL arsip untuk mesin open.mp dan SA-MP saja.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FrostCard {
+                Text("URL unduhan", style = MaterialTheme.typography.titleMedium, color = Mac.Text)
+                Text("Masukkan direct URL arsip untuk mesin open.mp dan SA-MP saja.", style = MaterialTheme.typography.bodySmall, color = Mac.Secondary)
                 OutlinedTextField(
                     value = openMpUrl,
                     onValueChange = { openMpUrl = it; Prefs.urlOpenMp = it.trim() },
@@ -371,29 +379,33 @@ fun SetupScreen() {
                     Prefs.urlOpenMp = openMpUrl
                     Prefs.urlSamp = sampUrl
                     Prefs.urlSampDl = sampDlUrl
-                }) { Text("Reset URL ke default") }
+                }, shape = RoundedCornerShape(20.dp)) { Text("Reset URL ke default") }
             }
         }
-        }
 
+        // Section: Aktivitas unduhan.
+        SectionHeader("Aktivitas unduhan")
         StaggeredItem(7, Modifier.fillMaxWidth()) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FrostCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Aktivitas unduhan", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    OutlinedButton(onClick = { Controller.setupLog.clear() }, enabled = !busy) {
-                        androidx.compose.material3.Icon(Icons.Default.Refresh, contentDescription = null)
+                    Text("Aktivitas unduhan", style = MaterialTheme.typography.titleMedium, color = Mac.Text, modifier = Modifier.weight(1f))
+                    OutlinedButton(
+                        onClick = { Controller.setupLog.clear() },
+                        enabled = !busy,
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                         Text(" Bersihkan")
                     }
                 }
                 if (log.isEmpty()) {
-                    Text("Belum ada aktivitas. Pilih mesin server lalu tekan Unduh.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Belum ada aktivitas. Pilih mesin server lalu tekan Unduh.", style = MaterialTheme.typography.bodySmall, color = Mac.Secondary)
                 } else {
                     LogView(log, Modifier.fillMaxWidth().height(230.dp))
                 }
             }
         }
-        }
+        Spacer(Modifier.height(8.dp))
     }
 
     // Konfirmasi sebelum restore: folder server akan ditimpa isi backup.
@@ -417,16 +429,5 @@ fun SetupScreen() {
                 TextButton(onClick = { restoreTarget = null }) { Text("Batal") }
             }
         )
-    }
-}
-
-@Composable
-private fun SwitchRow(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
-            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

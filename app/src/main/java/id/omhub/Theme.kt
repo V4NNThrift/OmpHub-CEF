@@ -76,6 +76,12 @@ object Mac {
     val Yellow get() = if (Prefs.themeDark) Color(0xFFFF9F0A) else Color(0xFFFF9500)
     val Red get() = if (Prefs.themeDark) Color(0xFFFF453A) else Color(0xFFFF3B30)
 
+    /** Semburat atas untuk gradient latar (navy pekat di gelap, abu lembut di terang). */
+    val GlowTop get() = if (Prefs.themeDark) Color(0xFF0D1B31) else Color(0xFFE9EDF3)
+
+    /** Latar terminal (selalu gelap, ala Terminal macOS) — dipakai Console. */
+    val TerminalBg = Color(0xFF0B0D0F)
+
     // Warna traffic-light macOS (tombol jendela) — sama di kedua tema.
     val TrafficRed = Color(0xFFFF5F57)
     val TrafficYellow = Color(0xFFFEBC2E)
