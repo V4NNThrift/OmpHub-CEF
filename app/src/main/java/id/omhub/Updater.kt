@@ -6,7 +6,6 @@ import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.core.content.FileProvider
-import androidx.core.content.pm.PackageInfoCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,7 +45,17 @@ object Updater {
     @Volatile private var autoChecked = false
 
     fun currentVersion(ctx: Context): String = runCatching {
-        PackageInfoCompat.getPackageInfo(ctx.packageManager, ctx.packageName, 0L).versionName ?: "?"
+        val pm = ctx.packageManager
+        val info = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            pm.getPackageInfo(
+                ctx.packageName,
+                android.content.pm.PackageManager.PackageInfoFlags.of(0)
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(ctx.packageName, 0)
+        }
+        info.versionName ?: "?"
     }.getOrDefault("?")
 
     /** Cek update. `auto = true` hanya jalan sekali per proses (cek otomatis saat aplikasi dibuka). */
