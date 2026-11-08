@@ -75,18 +75,20 @@ object Controller {
     }
 
     private const val ATOMIC_LIB = "usr/lib/i386-linux-gnu/libatomic.so.1"
+    private const val SSL_LIB = "usr/lib/i386-linux-gnu/libssl.so.3"
 
-    fun gameDepsOk() = File(Env.rootfsGame, ATOMIC_LIB).exists()
+    fun gameDepsOk() = File(Env.rootfsGame, ATOMIC_LIB).exists() &&
+        File(Env.rootfsGame, SSL_LIB).exists()
 
     fun ensureGameDeps(log: (String) -> Unit) {
         if (gameDepsOk()) return
-        log("Memasang library tambahan di rootfs (libatomic1), butuh beberapa menit...")
+        log("Memasang library tambahan di rootfs (libatomic1, libssl3), butuh beberapa menit...")
         val script = "export DEBIAN_FRONTEND=noninteractive; " +
             "apt-get -o APT::Sandbox::User=root update && " +
-            "apt-get -o APT::Sandbox::User=root install -y --no-install-recommends libatomic1"
+            "apt-get -o APT::Sandbox::User=root install -y --no-install-recommends libatomic1 libssl3"
         val r = Proot.build(Proot.Target.GAME, listOf("/bin/sh", "-c", script)).runAndCapture(900)
         log(r.output.takeLast(1500))
-        check(r.ok && gameDepsOk()) { "Gagal memasang libatomic1 (exit ${r.exit})" }
+        check(r.ok && gameDepsOk()) { "Gagal memasang libatomic1/libssl3 (exit ${r.exit})" }
     }
 
     suspend fun startGame(): Unit = withContext(Dispatchers.IO) { gameLock.withLock {
