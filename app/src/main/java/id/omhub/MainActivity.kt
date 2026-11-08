@@ -23,7 +23,6 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -32,7 +31,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import android.os.Build
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -42,8 +40,8 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.rgb(11, 13, 15)
-        window.navigationBarColor = android.graphics.Color.rgb(15, 17, 20)
+        window.statusBarColor = android.graphics.Color.rgb(28, 28, 30)
+        window.navigationBarColor = android.graphics.Color.rgb(28, 28, 30)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
         setContent { OmpRoot() }
     }
@@ -57,22 +55,10 @@ private val TABS: List<Pair<String, ImageVector>> = listOf(
     "Setup" to Icons.Default.Settings
 )
 
-private val OmpColors = darkColorScheme(
-    primary = Color(0xFF20C7D9),
-    onPrimary = Color(0xFF061316),
-    secondary = Color(0xFF9B70F5),
-    background = Color(0xFF0B0D0F),
-    surface = Color(0xFF15181C),
-    surfaceVariant = Color(0xFF1D2228),
-    onSurface = Color(0xFFE8EDF2),
-    onSurfaceVariant = Color(0xFF929BA6),
-    outline = Color(0xFF343B44)
-)
-
 @Composable
 fun OmpRoot() {
     LaunchedEffect(Unit) { withContext(Dispatchers.IO) { Controller.autoSetupOnFirstLaunch() } }
-    MaterialTheme(colorScheme = OmpColors) {
+    MaterialTheme(colorScheme = OmpColors, shapes = OmpShapes) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             val gate by Controller.bootGate.collectAsState()
             if (gate != BootGate.DONE) {
@@ -83,7 +69,7 @@ fun OmpRoot() {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 bottomBar = {
-                    NavigationBar(containerColor = Color(0xFF0F1114), contentColor = Color(0xFF929BA6)) {
+                    NavigationBar(containerColor = Mac.Panel, contentColor = Mac.Secondary) {
                         TABS.forEachIndexed { index, (label, icon) ->
                             NavigationBarItem(
                                 selected = tab == index,
@@ -91,11 +77,11 @@ fun OmpRoot() {
                                 icon = { Icon(icon, contentDescription = label) },
                                 label = { Text(label) },
                                 colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Color(0xFF20C7D9),
-                                    selectedTextColor = Color(0xFF20C7D9),
-                                    indicatorColor = Color(0xFF18343A),
-                                    unselectedIconColor = Color(0xFF737D88),
-                                    unselectedTextColor = Color(0xFF737D88)
+                                    selectedIconColor = Mac.Blue,
+                                    selectedTextColor = Mac.Blue,
+                                    indicatorColor = Mac.Blue.copy(alpha = 0.18f),
+                                    unselectedIconColor = Mac.Secondary,
+                                    unselectedTextColor = Mac.Secondary
                                 )
                             )
                         }
