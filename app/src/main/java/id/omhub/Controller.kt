@@ -61,6 +61,10 @@ object Controller {
     @Volatile var gameStartedAt = 0L
     @Volatile var dbStartedAt = 0L
 
+    /** True kalau user memang mau server jalan — dipakai watchdog untuk membedakan crash vs stop manual. */
+    @Volatile var wantGame = false
+    @Volatile var wantDb = false
+
     fun gamePid(): Int? = pidOf(gameProc)
 
     fun refreshStatus() {
@@ -105,6 +109,7 @@ object Controller {
             return@withLock
         }
         gameState.value = RunState.STARTING
+        wantGame = true
         try {
             if (type == ServerType.OMP) ensureGameDeps { gameLog.add(it) }
 
@@ -138,11 +143,13 @@ object Controller {
             }
         } catch (e: Throwable) {
             gameLog.add("[panel] Gagal start: ${e.message}")
+            wantGame = false
             gameState.value = RunState.STOPPED
         }
     } }
 
     suspend fun stopGame(): Unit = withContext(Dispatchers.IO) { gameLock.withLock {
+        wantGame = false
         val p = gameProc ?: run { gameState.value = RunState.STOPPED; return@withLock }
         gameState.value = RunState.STOPPING
         val kids = pidOf(p)?.let { descendantsOf(it) }.orEmpty()
@@ -227,6 +234,7 @@ object Controller {
             return@withContext
         }
         dbState.value = RunState.STARTING
+        wantDb = true
         try {
             MariaDb.start(
                 onLine = { dbLog.add(it) },
@@ -249,15 +257,18 @@ object Controller {
             } else {
                 dbLog.add("[panel] MariaDB tidak siap dalam waktu yang ditentukan.")
                 MariaDb.stop()
+                wantDb = false
                 dbState.value = RunState.STOPPED
             }
         } catch (e: Throwable) {
             dbLog.add("[panel] Gagal start MariaDB: ${e.message}")
+            wantDb = false
             dbState.value = RunState.STOPPED
         }
     }
 
     suspend fun stopDb(): Unit = withContext(Dispatchers.IO) {
+        wantDb = false
         if (dbState.value == RunState.STOPPED) return@withContext
         dbState.value = RunState.STOPPING
         try {

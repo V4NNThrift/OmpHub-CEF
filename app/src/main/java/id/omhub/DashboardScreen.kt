@@ -131,6 +131,7 @@ fun DashboardScreen() {
     val pressQr = rememberPressSource()
     val pressShare = rememberPressSource()
     val pressCopy = rememberPressSource()
+    val pressCopyTs = rememberPressSource()
 
     // Tangkap sekali supaya tidak ada `!!` pada state yang bisa berubah.
     val infoSnapshot = info
@@ -267,10 +268,27 @@ fun DashboardScreen() {
                     Text(if (running && serverInfo != null) serverInfo.name else if (running) "Menunggu respons query UDP…" else "Server belum aktif", color = Mac.Text, fontSize = 13.sp)
                     InfoLine("Engine", st.engine.label)
                     InfoLine("UDP port", Prefs.port.toString())
+                    if (running && Controller.gameStartedAt > 0) {
+                        InfoLine("Uptime", fmtUptime(Controller.gameStartedAt))
+                    }
                     InfoLine("Gamemode", serverInfo?.mode ?: "—")
                     InfoLine("Language", serverInfo?.language ?: "—")
                     val ips = localIps()
                     if (ips.isNotEmpty()) InfoLine("LAN address", ips.joinToString { "$it:${Prefs.port}" })
+                    val tsIp = tailscaleIp()
+                    if (tsIp != null) {
+                        val tsAddr = "$tsIp:${Prefs.port}"
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Tailscale", Modifier.weight(1f), color = Mac.Secondary, fontSize = 12.sp)
+                            Text(tsAddr, color = Mac.Text, fontSize = 12.sp)
+                            TextButton(
+                                onClick = { copyText(ctx, "Alamat Tailscale", tsAddr) },
+                                modifier = Modifier.pressScale(pressCopyTs),
+                                interactionSource = pressCopyTs
+                            ) { Text("Salin", color = Mac.Blue, fontSize = 12.sp) }
+                        }
+                        Text("Teman satu Tailnet bisa join dari mana saja.", color = Mac.Secondary, fontSize = 11.sp)
+                    }
                     InfoLine("Local", "127.0.0.1:${Prefs.port}")
                     val lanAddr = primaryLanAddress()
                     if (lanAddr != null) {

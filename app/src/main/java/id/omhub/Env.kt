@@ -105,6 +105,18 @@ object Prefs {
     var themeDark: Boolean
         get() = sp.getBoolean("themeDark", true)
         set(v) = sp.edit().putBoolean("themeDark", v).apply()
+    /** Restart otomatis (watchdog) kalau game server / MariaDB mati sendiri. */
+    var watchdogEnabled: Boolean
+        get() = sp.getBoolean("watchdogEnabled", true)
+        set(v) = sp.edit().putBoolean("watchdogEnabled", v).apply()
+    /** Start server otomatis setelah HP selesai boot. */
+    var bootAutoStart: Boolean
+        get() = sp.getBoolean("bootAutoStart", false)
+        set(v) = sp.edit().putBoolean("bootAutoStart", v).apply()
+    /** Notifikasi event: pemain join/leave, server mati, restart watchdog. */
+    var notifyEvents: Boolean
+        get() = sp.getBoolean("notifyEvents", true)
+        set(v) = sp.edit().putBoolean("notifyEvents", v).apply()
     var sampVersion: SampVersion
         get() = SampVersion.from(sp.getString("sampVersion", null))
         set(v) = sp.edit().putString("sampVersion", v.code).apply()

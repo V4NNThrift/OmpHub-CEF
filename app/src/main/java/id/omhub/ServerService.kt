@@ -9,14 +9,17 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicInteger
 
 class ServerService : Service() {
@@ -39,6 +42,8 @@ class ServerService : Service() {
     private val busy = AtomicInteger(0)
     private var wake: PowerManager.WakeLock? = null
     private var watching = false
+    private var watchdogStarted = false
+    private var playerWatchStarted = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -50,6 +55,8 @@ class ServerService : Service() {
             wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "omphub:server").apply { acquire() }
         }
         watch()
+        startWatchdog()
+        startPlayerWatcher()
         PerfMonitor.ensureStarted()
 
         val action = intent?.action
@@ -85,10 +92,101 @@ class ServerService : Service() {
         }
     }
 
+    /**
+     * Watchdog: kalau game server / MariaDB mati sendiri (bukan karena user pencet Stop),
+     * nyalakan lagi otomatis. Backoff 5 detik, maks 5x restart dalam 10 menit lalu berhenti
+     * + beri tahu user. Berhenti manual (wantGame/wantDb = false) tidak pernah di-restart.
+     */
+    private val gameRestarts = mutableListOf<Long>()
+    private val dbRestarts = mutableListOf<Long>()
+
+    private fun startWatchdog() {
+        if (watchdogStarted) return
+        watchdogStarted = true
+        scope.launch {
+            var prev = Controller.gameState.value
+            Controller.gameState.collect { state ->
+                if (prev == RunState.RUNNING && state == RunState.STOPPED) handleUnexpectedStop(isGame = true)
+                prev = state
+            }
+        }
+        scope.launch {
+            var prev = Controller.dbState.value
+            Controller.dbState.collect { state ->
+                if (prev == RunState.RUNNING && state == RunState.STOPPED) handleUnexpectedStop(isGame = false)
+                prev = state
+            }
+        }
+    }
+
+    private suspend fun handleUnexpectedStop(isGame: Boolean) {
+        val want = if (isGame) Controller.wantGame else Controller.wantDb
+        if (!want) return // user yang berhentiin — jangan restart, jangan notif
+        val what = if (isGame) "Server game" else "MariaDB"
+        if (!Prefs.watchdogEnabled) {
+            Notifier.serverDied(this, "$what berhenti mendadak.")
+            return
+        }
+        // Tunggu 5 detik lalu cek ulang: restart manual (tombol Restart) juga melewati
+        // transisi RUNNING -> STOPPED, tapi sesudah itu state sudah RUNNING lagi.
+        delay(5000)
+        val state = if (isGame) Controller.gameState.value else Controller.dbState.value
+        val stillWant = if (isGame) Controller.wantGame else Controller.wantDb
+        if (state != RunState.STOPPED || !stillWant) return
+        val restarts = if (isGame) gameRestarts else dbRestarts
+        val now = SystemClock.elapsedRealtime()
+        restarts.removeAll { now - it > 10 * 60 * 1000 }
+        if (restarts.size >= 5) {
+            if (isGame) Controller.wantGame = false else Controller.wantDb = false
+            Notifier.watchdogGaveUp(this, what)
+            return
+        }
+        restarts.add(now)
+        Notifier.watchdogRestart(this, what)
+        Controller.scope.launch { if (isGame) Controller.startGame() else Controller.startDb() }
+    }
+
+    /**
+     * Pantau pemain lewat query UDP tiap 5 detik (di service, supaya jalan walau
+     * Dashboard tidak dibuka). Join/leave dikirim ke Notifier (digabung, anti-spam).
+     */
+    private fun startPlayerWatcher() {
+        if (playerWatchStarted) return
+        playerWatchStarted = true
+        scope.launch {
+            var prev = emptySet<String>()
+            var needSeed = true
+            while (true) {
+                val running = Controller.gameState.value == RunState.RUNNING
+                if (running && Prefs.notifyEvents) {
+                    val current = withContext(Dispatchers.IO) {
+                        Samp.playersDetailed(Prefs.port).map { it.name }.toSet()
+                    }
+                    if (needSeed) {
+                        // Poll pertama setelah server jalan: jadikan baseline, jangan notif.
+                        prev = current
+                        needSeed = false
+                    } else {
+                        (current - prev).forEach { Notifier.playerEvent(this@ServerService, "$it bergabung") }
+                        (prev - current).forEach { Notifier.playerEvent(this@ServerService, "$it keluar") }
+                        prev = current
+                    }
+                } else {
+                    prev = emptySet()
+                    needSeed = true
+                }
+                delay(5000)
+            }
+        }
+    }
+
     private fun maybeStop() {
+        // Jangan matikan service kalau watchdog masih berniat restart sesuatu.
+        val watchdogHolding = Prefs.watchdogEnabled && (Controller.wantGame || Controller.wantDb)
         if (busy.get() == 0 &&
             Controller.gameState.value == RunState.STOPPED &&
-            Controller.dbState.value == RunState.STOPPED
+            Controller.dbState.value == RunState.STOPPED &&
+            !watchdogHolding
         ) {
             stopForeground(true)
             stopSelf()
@@ -102,23 +200,33 @@ class ServerService : Service() {
         }
     }
 
+    private fun actionIntent(action: String, code: Int): PendingIntent =
+        PendingIntent.getService(
+            this, code, Intent(this, ServerService::class.java).setAction(action),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
     private fun notification(text: String): Notification {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val stop = PendingIntent.getService(
-            this, 1, Intent(this, ServerService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(this, CHANNEL)
+        val builder = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
             .setContentTitle("OmpHub")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
-            .addAction(0, "Stop", stop)
-            .build()
+        // Aksi cepat di notifikasi: Start saat berhenti, Restart + Stop saat jalan.
+        when (Controller.gameState.value) {
+            RunState.RUNNING -> {
+                builder.addAction(0, "Restart", actionIntent(ACTION_RESTART, 3))
+                builder.addAction(0, "Stop", actionIntent(ACTION_STOP, 1))
+            }
+            RunState.STOPPED -> builder.addAction(0, "Start", actionIntent(ACTION_START, 2))
+            else -> builder.addAction(0, "Stop", actionIntent(ACTION_STOP, 1))
+        }
+        return builder.build()
     }
 
     override fun onDestroy() {

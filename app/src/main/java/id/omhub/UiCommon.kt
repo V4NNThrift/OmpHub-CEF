@@ -93,6 +93,39 @@ fun localIps(): List<String> = runCatching {
         .mapNotNull { it.hostAddress }
 }.getOrDefault(emptyList())
 
+/**
+ * IP Tailscale HP ini (100.64.0.0/10, interface "tailscale0").
+ * Mengembalikan null kalau Tailscale tidak jalan. Dipakai supaya teman satu
+ * Tailnet bisa join dari mana saja, bukan cuma satu WiFi.
+ */
+fun tailscaleIp(): String? = runCatching {
+    NetworkInterface.getNetworkInterfaces().toList().firstNotNullOfOrNull { iface ->
+        val name = iface.name.lowercase()
+        iface.inetAddresses.toList().firstNotNullOfOrNull { addr ->
+            if (addr is Inet4Address && !addr.isLoopbackAddress) {
+                val host = addr.hostAddress ?: return@firstNotNullOfOrNull null
+                val octets = host.split(".")
+                val inCgnat = octets.size == 4 && octets[0] == "100" &&
+                    (octets[1].toIntOrNull() ?: -1) in 64..127
+                if (name.contains("tailscale") || (name.startsWith("tun") && inCgnat)) host else null
+            } else null
+        }
+    }
+}.getOrNull()
+
+/** Durasi sejak [startElapsedMs] (SystemClock.elapsedRealtime) — mis. "2j 15m", "45d". */
+fun fmtUptime(startElapsedMs: Long): String {
+    val s = ((android.os.SystemClock.elapsedRealtime() - startElapsedMs) / 1000).coerceAtLeast(0)
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    val sec = s % 60
+    return when {
+        h > 0 -> "${h}j ${m}m"
+        m > 0 -> "${m}m ${sec}d"
+        else -> "${sec}d"
+    }
+}
+
 fun humanSize(b: Long): String = when {
     b < 1024 -> "$b B"
     b < 1024 * 1024 -> "${b / 1024} KB"

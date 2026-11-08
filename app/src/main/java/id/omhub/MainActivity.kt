@@ -1,10 +1,15 @@
 package id.omphub
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -80,6 +85,20 @@ fun OmpRoot() {
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { Controller.autoSetupOnFirstLaunch() }
         Updater.check(ctx, auto = true)
+    }
+
+    // Notifikasi event (pemain join/leave, server mati) butuh izin runtime di Android 13+.
+    // Tanpa izin, notifikasi event diam-diam tidak tampil — minta sekali saat aplikasi dibuka.
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     // Warna status bar / nav bar mengikuti tema aktif.

@@ -29,6 +29,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,6 +69,9 @@ fun SetupScreen() {
     var restoreTarget by remember { mutableStateOf<File?>(null) }
     val upd by Updater.state.collectAsStateWithLifecycle()
     val darkTheme by ThemeState.dark.collectAsStateWithLifecycle()
+    var watchdog by remember { mutableStateOf(Prefs.watchdogEnabled) }
+    var bootAuto by remember { mutableStateOf(Prefs.bootAutoStart) }
+    var notifyEv by remember { mutableStateOf(Prefs.notifyEvents) }
     val pressInstall = rememberPressSource()
     val pressDark = rememberPressSource()
     val pressLight = rememberPressSource()
@@ -215,6 +219,32 @@ fun SetupScreen() {
         StaggeredItem(3, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Otomatisasi & notifikasi", style = MaterialTheme.typography.titleMedium)
+                SwitchRow(
+                    title = "Restart otomatis (watchdog)",
+                    desc = "Server dinyalakan lagi kalau mati sendiri. Maks 5x dalam 10 menit.",
+                    checked = watchdog,
+                    onChange = { watchdog = it; Prefs.watchdogEnabled = it }
+                )
+                SwitchRow(
+                    title = "Start otomatis saat HP nyala",
+                    desc = "Server jalan sendiri setelah HP selesai restart.",
+                    checked = bootAuto,
+                    onChange = { bootAuto = it; Prefs.bootAutoStart = it }
+                )
+                SwitchRow(
+                    title = "Notifikasi pemain & server",
+                    desc = "Beri tahu saat pemain join/leave atau server mati mendadak.",
+                    checked = notifyEv,
+                    onChange = { notifyEv = it; Prefs.notifyEvents = it }
+                )
+            }
+        }
+        }
+
+        StaggeredItem(4, Modifier.fillMaxWidth()) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Update aplikasi", style = MaterialTheme.typography.titleMedium)
                 Text("Versi terpasang: ${Updater.currentVersion(ctx)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
@@ -252,7 +282,7 @@ fun SetupScreen() {
         }
         }
 
-        StaggeredItem(4, Modifier.fillMaxWidth()) {
+        StaggeredItem(5, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Backup", style = MaterialTheme.typography.titleMedium)
@@ -308,7 +338,7 @@ fun SetupScreen() {
         }
         }
 
-        StaggeredItem(5, Modifier.fillMaxWidth()) {
+        StaggeredItem(6, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("URL unduhan", style = MaterialTheme.typography.titleMedium)
@@ -346,7 +376,7 @@ fun SetupScreen() {
         }
         }
 
-        StaggeredItem(6, Modifier.fillMaxWidth()) {
+        StaggeredItem(7, Modifier.fillMaxWidth()) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -387,5 +417,16 @@ fun SetupScreen() {
                 TextButton(onClick = { restoreTarget = null }) { Text("Batal") }
             }
         )
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
